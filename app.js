@@ -458,8 +458,8 @@ async function boot(){
   await loadFip();
   if(lsGet(TOKK))await refresh();else render();
   setInterval(()=>{if(document.visibilityState==='visible'&&S)refresh(true)},30000);
-  setInterval(loadFip,15*60000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S)refresh(true)});
+  setInterval(()=>{if(document.visibilityState==='visible')loadFip().then(()=>S&&render())},5*60000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S){refresh(true);loadFip().then(()=>render())}});
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 boot();

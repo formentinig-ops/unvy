@@ -2,8 +2,11 @@ name: Aggiorna dati FIPAV
 
 on:
   schedule:
-    - cron: "17 */3 * * *"   # ogni 3 ore
-    - cron: "45 21,22 * * 5,6" # più spesso nelle sere di partita (UTC)
+    # orari in UTC (Italia = UTC+1 d'inverno, UTC+2 d'estate)
+    - cron: "7 * * * *"              # ogni ora, tutti i giorni
+    - cron: "*/15 13-23 * * 5,6"     # venerdì e sabato dal pomeriggio a mezzanotte: ogni 15 minuti
+    - cron: "*/15 18-23 * * 3,4"     # mercoledì e giovedì sera (anticipi): ogni 15 minuti
+    - cron: "*/15 13-21 * * 0"       # domenica pomeriggio: ogni 15 minuti
   workflow_dispatch: {}
 
 permissions:
@@ -34,4 +37,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/fipav.json
           git commit -m "Dati FIPAV aggiornati"
+          git pull --rebase -q
           git push
