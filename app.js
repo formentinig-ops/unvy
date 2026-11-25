@@ -61,7 +61,7 @@ async function refresh(quiet){
     const st=await rpc('get_state',{tok});
     const raw=JSON.stringify(st);
     if(quiet&&raw===RAW&&S)return;
-    RAW=raw;st._m=st.matches||[];st._g=st.gyms||[];S=st;applyFip();render();
+    RAW=raw;st._m=st.matches||[];st._g=st.gyms||[];S=st;applyFip();render();rtConnect();
   }catch(e){
     if(e.message==='SESSIONE'){lsSet(TOKK,null);S=null;render()}
     else if(!quiet)toast('Connessione',' Non riesco a raggiungere il server. Riprovo tra poco.');
@@ -69,10 +69,29 @@ async function refresh(quiet){
 }
 async function act(a,x,ok){
   if(BUSY)return false;BUSY=true;
-  try{const r=await rpc('act',{tok:lsGet(TOKK),a,x:x||{}});await refresh();if(ok)toast(ok[0],ok[1]);return r||true}
+  try{const r=await rpc('act',{tok:lsGet(TOKK),a,x:x||{}});rtPing();await refresh();if(ok)toast(ok[0],ok[1]);return r||true}
   catch(e){if(e.message==='SESSIONE'){lsSet(TOKK,null);S=null;render()}else toast('Ops',' '+errMsg(e));return false}
   finally{BUSY=false}
 }
+/* ---- tempo reale: quando qualcuno modifica qualcosa, gli altri telefoni si aggiornano subito.
+   Il segnale non contiene dati: dice solo "ricarica". I dati passano sempre da get_state con il PIN. */
+let WS=null,WSREF=0,WSHB=null,WSRETRY=1000,RTT=null;
+const RT_TOPIC='realtime:unvy-squadra';
+function rtSend(ev,payload){
+  if(!WS||WS.readyState!==1)return;
+  const hb=ev==='heartbeat';
+  WS.send(JSON.stringify({topic:hb?'phoenix':RT_TOPIC,event:ev,payload,ref:String(++WSREF),join_ref:hb?undefined:'1'}));
+}
+function rtConnect(){
+  if(!S||WS||!CFG.url)return;
+  try{WS=new WebSocket((CFG.rt||CFG.url.replace(/^http/,'ws')+'/realtime/v1/websocket')+'?apikey='+encodeURIComponent(CFG.key)+'&vsn=1.0.0')}catch(e){WS=null;return}
+  WS.onopen=()=>{WSRETRY=1000;rtSend('phx_join',{config:{broadcast:{self:false,ack:false},presence:{key:''},postgres_changes:[],private:false}});WSHB=setInterval(()=>rtSend('heartbeat',{}),25000)};
+  WS.onmessage=m=>{try{const d=JSON.parse(m.data);if(d.event==='broadcast'&&d.payload&&d.payload.event==='changed'){clearTimeout(RTT);RTT=setTimeout(()=>refresh(true),300)}}catch(e){}};
+  WS.onclose=()=>{clearInterval(WSHB);WS=null;if(S&&document.visibilityState==='visible'){setTimeout(()=>{rtConnect();refresh(true)},WSRETRY);WSRETRY=Math.min(WSRETRY*2,30000)}};
+  WS.onerror=()=>{try{WS.close()}catch(e){}};
+}
+function rtClose(){if(WS){const w=WS;WS=null;try{w.close()}catch(e){}}}
+const rtPing=()=>rtSend('broadcast',{type:'broadcast',event:'changed',payload:{}});
 const catGroups=()=>{const seen=new Set(),out=[];S.cats.forEach(c=>{const k=c.t+c.g;if(!seen.has(k)){seen.add(k);out.push([c.t,c.g])}});return out};
 const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -415,7 +434,7 @@ const A={
     if(!LG.first){LG.first=pin;LG.pin='';return render()}
     if(LG.first!==pin){LG.first='';LG.pin='';LG.err='I due PIN non coincidono: riprova.';return render()}
     doLogin(pin)},
-  logout:async()=>{try{await rpc('act',{tok:lsGet(TOKK),a:'logout',x:{}})}catch(e){}lsSet(TOKK,null);S=null;RAW='';LG.st=0;render()},
+  logout:async()=>{try{await rpc('act',{tok:lsGet(TOKK),a:'logout',x:{}})}catch(e){}lsSet(TOKK,null);S=null;RAW='';LG.st=0;rtClose();render()},
   pinreset:v=>act('pin_reset',{p:v},['Fatto',' Al prossimo accesso sceglierà un nuovo PIN.']).then(()=>playerSheet(v)),
   copycode:()=>{try{navigator.clipboard.writeText(S.code).then(()=>toast('Copiato',' Incollalo nel gruppo della squadra.'),()=>toast('Codice',' '+S.code))}catch(e){toast('Codice',' '+S.code)}},
   instok:()=>{lsSet('unvy-inst','1');render()},
@@ -459,7 +478,7 @@ async function boot(){
   if(lsGet(TOKK))await refresh();else render();
   setInterval(()=>{if(document.visibilityState==='visible'&&S)refresh(true)},30000);
   setInterval(()=>{if(document.visibilityState==='visible')loadFip().then(()=>S&&render())},5*60000);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S){refresh(true);loadFip().then(()=>render())}});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S){rtConnect();refresh(true);loadFip().then(()=>render())}});
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 boot();
