@@ -520,7 +520,8 @@ async function boot(){
   setInterval(()=>{if(document.visibilityState==='visible'&&S)refresh(true)},30000);
   setInterval(()=>{if(document.visibilityState==='visible')loadFip().then(()=>S&&render())},5*60000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S){rtConnect();refresh(true);loadFip().then(()=>render())}});
-  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});if(pushOK())pushEndpoint().then(()=>{if(S&&UI.tab==='more')render()})}
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')r.update()})}).catch(()=>{});
+    let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded||$('#sheet').hidden===false)return;reloaded=true;location.reload()});if(pushOK())pushEndpoint().then(()=>{if(S&&UI.tab==='more')render()})}
 }
 boot();
 }

@@ -1,6 +1,6 @@
 // Service worker: rende l'app installabile e la apre anche senza rete.
 // Strategia "prima la rete": se c'è connessione si scarica sempre l'ultima versione.
-const CACHE = 'unvy-v2';
+const CACHE = 'unvy-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'data/fipav.json', 'icons/logo-crop.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -36,7 +36,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' }) // chiede sempre a GitHub se c'è una versione nuova
       .then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
   );
