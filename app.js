@@ -161,7 +161,8 @@ function jersey(p,sz=40){
   if(p.foto)return `<img class="ava" src="${esc(p.foto)}" width="${sz}" height="${sz}" alt="">`;
   const lib=p.ruolo==='Libero';const fill=lib?'var(--acc)':'var(--shirt)';
   const n=p.num??(p.nome[0]+p.cognome[0]);
-  return `<svg width="${sz}" height="${sz}" viewBox="0 0 40 40" aria-hidden="true"><path d="M13 4L3 9.5l3.6 8 4.4-2V37h18V15.5l4.4 2 3.6-8L27 4c-1.6 3-4 4.4-7 4.4S14.6 7 13 4z" fill="${fill}" stroke="${lib?'none':'var(--shirtE)'}" stroke-width="1.2"/><text x="20" y="${p.num!=null?29:27}" text-anchor="middle" fill="#fff" font-family="Archivo" font-weight="900" font-stretch="120%" font-size="${p.num!=null?13:9}">${esc(n)}</text></svg>`;
+  const K=1.2,w=Math.round(sz*K); /* maglia più grande, numero della stessa grandezza */
+  return `<svg width="${w}" height="${w}" viewBox="0 0 40 40" aria-hidden="true"><path d="M13 4L3 9.5l3.6 8 4.4-2V37h18V15.5l4.4 2 3.6-8L27 4c-1.6 3-4 4.4-7 4.4S14.6 7 13 4z" fill="${fill}" stroke="${lib?'none':'var(--shirtE)'}" stroke-width="1.2"/><text x="20" y="${p.num!=null?29:27}" text-anchor="middle" fill="#fff" font-family="Archivo" font-weight="900" font-stretch="120%" font-size="${((p.num!=null?13:9)/K).toFixed(1)}">${esc(n)}</text></svg>`;
 }
 function tot(pid){let x=0,j=0;S.entries.forEach(e=>{if(e.p!==pid||e.st!=='ok')return;e.t==='X'?x+=units(e):j+=units(e)});return {x,j,net:(x-j)*S.valX}}
 function rank(){return S.people.filter(p=>p.stato!=='fuori').map(p=>({p,...tot(p.id)})).sort((a,b)=>b.x-b.j-(a.x-a.j)||b.x-a.x)}
