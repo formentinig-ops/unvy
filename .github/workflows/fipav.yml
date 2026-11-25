@@ -1,0 +1,37 @@
+name: Aggiorna dati FIPAV
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"   # ogni 3 ore
+    - cron: "45 21,22 * * 5,6" # più spesso nelle sere di partita (UTC)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fipav
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Leggi il portale FIPAV
+        run: python3 scripts/fipav_sync.py
+      - name: Salva se ci sono novità
+        run: |
+          if git diff --quiet data/fipav.json; then
+            echo "Nessuna novità"
+            exit 0
+          fi
+          git config user.name "unvy-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/fipav.json
+          git commit -m "Dati FIPAV aggiornati"
+          git push
