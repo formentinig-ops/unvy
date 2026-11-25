@@ -92,8 +92,31 @@ create table if not exists sessions (
   last_seen timestamptz not null default now()
 );
 
+-- notifiche push
+create table if not exists push_subs (
+  endpoint text primary key,
+  p text not null references people(id) on delete cascade,
+  p256dh text not null,
+  auth text not null,
+  prefs jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create table if not exists push_outbox (
+  id bigint generated always as identity primary key,
+  kind text not null,
+  target text references people(id) on delete cascade,
+  title text not null,
+  body text not null default '',
+  url text not null default './',
+  status text not null default 'pending',
+  picked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create table if not exists fip_snap (id int primary key default 1 check (id = 1), data jsonb not null);
+create table if not exists sent_marks (k text primary key, at timestamptz not null default now());
+
 do $$ declare t text; begin
-  foreach t in array array['team','people','cats','entries','gyms','matches','pizza_due','pizza_hist','pizza_skip','sessions'] loop
+  foreach t in array array['team','people','cats','entries','gyms','matches','pizza_due','pizza_hist','pizza_skip','sessions','push_subs','push_outbox','fip_snap','sent_marks'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on public.%I from anon, authenticated', t);
   end loop;
@@ -165,12 +188,47 @@ begin
         order by d desc, created_at desc) from entries), '[]'::jsonb),
     'gyms', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'nome', nome, 'addr', addr)) from gyms), '[]'::jsonb),
     'matches', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'avv', avv, 'casa', casa, 'gym', gym, 'd', d, 'ora', ora)) from matches), '[]'::jsonb),
+    'push', coalesce((select jsonb_agg(jsonb_build_object('endpoint', endpoint, 'prefs', prefs)) from push_subs where p = me.id), '[]'::jsonb),
     'pizza', jsonb_build_object(
       'due', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'p', p, 'mot', mot) order by ord) from pizza_due), '[]'::jsonb),
       'hist', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'p', p, 'mot', mot, 'd', d) order by d) from pizza_hist), '[]'::jsonb),
       'skip', coalesce((select jsonb_object_agg(d::text, true) from pizza_skip), '{}'::jsonb))
   );
 end $$;
+
+-- ---------------------------------------------------------------- notifiche: aiuti
+
+create or replace function public._enqueue(k text, tgt text, ttl text, bdy text)
+returns void language sql security definer set search_path = public as $$
+  insert into push_outbox(kind, target, title, body) values (k, tgt, left(ttl, 120), left(coalesce(bdy, ''), 300));
+$$;
+
+create or replace function public._mark(key text)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  insert into sent_marks(k) values (key);
+  return true;
+exception when unique_violation then
+  return false;
+end $$;
+
+create or replace function public._mtitle(avv text, casa boolean)
+returns text language sql immutable as $$
+  select case when casa then 'UNVY – ' || avv else avv || ' – UNVY' end;
+$$;
+
+create or replace function public._mwhen(d date, ora text)
+returns text language sql immutable as $$
+  select (array['dom','lun','mar','mer','gio','ven','sab'])[extract(dow from d)::int + 1] || ' ' ||
+         extract(day from d)::int || '/' || extract(month from d)::int || ' ore ' || ora;
+$$;
+
+create or replace function public._gymname(gid text)
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce(
+    (select x->>'nome' from fip_snap, jsonb_array_elements(data->'gyms') x where x->>'id' = gid limit 1),
+    (select nome from gyms where id = gid));
+$$;
 
 -- ---------------------------------------------------------------- scrittura
 
@@ -195,7 +253,14 @@ begin
       if not exists (select 1 from people where id = pid and stato <> 'fuori') then raise exception 'DATI'; end if;
       insert into entries(t, p, c, q, d, n, da, st)
       values (x->>'t', pid, x->>'c', greatest(1, least(200, coalesce((x->>'q')::int, 1))),
-              coalesce((x->>'d')::date, current_date), left(coalesce(x->>'n', ''), 300), me.id, stt);
+              coalesce((x->>'d')::date, current_date), left(coalesce(x->>'n', ''), 300), me.id, stt)
+      returning * into e;
+      if stt = 'ok' then
+        perform _enqueue('x', pid, case when e.t = 'X' then 'Nuova X' else 'Nuovo Jolly! 🎉' end,
+          (select nome from cats where id = e.c) || case when e.q > 1 then ' ×' || e.q else '' end ||
+          ' · ' || ((select u from cats where id = e.c) * e.q * (select val_x from team)) || ' €' ||
+          case when e.n <> '' then ' · ' || e.n else '' end);
+      end if;
     end loop;
     return jsonb_build_object('st', stt);
 
@@ -204,7 +269,12 @@ begin
     select * into e from entries where id = (x->>'id')::uuid;
     if e.id is null then raise exception 'DATI'; end if;
     if a = 'entry_del' then delete from entries where id = e.id;
-    elsif a = 'entry_appr' then update entries set st = 'ok', da = me.id where id = e.id and st = 'prop';
+    elsif a = 'entry_appr' then
+      update entries set st = 'ok', da = me.id where id = e.id and st = 'prop';
+      if found then
+        perform _enqueue('x', e.p, case when e.t = 'X' then 'Nuova X' else 'Nuovo Jolly! 🎉' end,
+          (select nome from cats where id = e.c) || ' · ' || ((select u from cats where id = e.c) * e.q * (select val_x from team)) || ' €');
+      end if;
     elsif a = 'entry_rej' then delete from entries where id = e.id and st = 'prop';
     else
       delete from entries where id = e.id and st = 'prop';
@@ -213,6 +283,9 @@ begin
              'Proposta respinta: ' || (select nome from cats where id = e.c) || ' a ' || (select nome || ' ' || cognome from people where id = e.p),
              me.id, 'ok'
       from cats c where c.nome ilike 'Proposta di X%' limit 1;
+      if e.da is not null then
+        perform _enqueue('x', e.da, 'Nuova X', 'Proposta di X palesemente assurda · ' || (select val_x from team) || ' €');
+      end if;
     end if;
 
   elsif a = 'perm_set' then
@@ -252,10 +325,14 @@ begin
       gid := 'g' || substr(md5(random()::text), 1, 8);
       insert into gyms(id, nome, addr) values (gid, left(x->'newgym'->>'nome', 80), left(x->'newgym'->>'addr', 160));
     end if;
+    stt := case when exists (select 1 from matches where id = x->>'id') then 'cambi' else 'partita' end;
     insert into matches(id, avv, casa, gym, d, ora)
     values (coalesce(nullif(x->>'id', ''), 'm' || substr(md5(random()::text), 1, 8)), left(x->>'avv', 80),
             coalesce((x->>'casa')::boolean, true), gid, (x->>'d')::date, left(x->>'ora', 5))
     on conflict (id) do update set avv = excluded.avv, casa = excluded.casa, gym = excluded.gym, d = excluded.d, ora = excluded.ora;
+    perform _enqueue(stt, null, case when stt = 'partita' then 'Nuova partita in calendario' else 'Partita modificata' end,
+      _mtitle(x->>'avv', coalesce((x->>'casa')::boolean, true)) || ' · ' || _mwhen((x->>'d')::date, left(x->>'ora', 5)) ||
+      coalesce(' · ' || _gymname(gid), ''));
 
   elsif a = 'match_del' then
     if not can_par then raise exception 'PERMESSO'; end if;
@@ -285,6 +362,24 @@ begin
       insert into pizza_skip(d) values ((x->>'d')::date);
     end if;
 
+  elsif a = 'push_sub' then
+    if coalesce(x->>'endpoint', '') !~ '^https://' or coalesce(x->>'p256dh', '') = '' or coalesce(x->>'auth', '') = '' then
+      raise exception 'DATI';
+    end if;
+    insert into push_subs(endpoint, p, p256dh, auth, prefs)
+    values (x->>'endpoint', me.id, x->>'p256dh', x->>'auth', coalesce(x->'prefs', '{}'::jsonb))
+    on conflict (endpoint) do update set p = excluded.p, p256dh = excluded.p256dh, auth = excluded.auth, prefs = excluded.prefs;
+
+  elsif a = 'push_prefs' then
+    update push_subs set prefs = coalesce(x->'prefs', '{}'::jsonb) where endpoint = x->>'endpoint' and p = me.id;
+
+  elsif a = 'push_unsub' then
+    delete from push_subs where endpoint = x->>'endpoint';
+
+  elsif a = 'push_test' then
+    if not exists (select 1 from push_subs where p = me.id) then raise exception 'DATI'; end if;
+    perform _enqueue('test', me.id, 'Notifiche attive ✅', 'Da ora UNVY ti avvisa anche con l''app chiusa.');
+
   elsif a = 'logout' then
     delete from sessions where token = tok;
 
@@ -294,8 +389,106 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+-- ---------------------------------------------------------------- notifiche: funzioni del server (solo service_role)
+
+create or replace function public.push_queue()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare res jsonb;
+begin
+  update push_outbox set status = 'old' where status = 'pending' and created_at < now() - interval '1 day';
+  with picked as (
+    update push_outbox set status = 'sending', picked_at = now()
+    where id in (select id from push_outbox
+                 where status = 'pending' or (status = 'sending' and picked_at < now() - interval '10 minutes')
+                 order by id limit 40 for update skip locked)
+    returning *)
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', o.id,
+      'payload', jsonb_build_object('title', o.title, 'body', o.body, 'url', o.url, 'tag', o.kind || '-' || o.id),
+      'subs', coalesce((select jsonb_agg(jsonb_build_object('endpoint', s.endpoint, 'keys', jsonb_build_object('p256dh', s.p256dh, 'auth', s.auth)))
+                        from push_subs s
+                        where (o.target is null or s.p = o.target)
+                          and (o.kind = 'test' or coalesce((s.prefs->>o.kind)::boolean, true))), '[]'::jsonb))), '[]'::jsonb)
+  into res from picked o;
+  return res;
+end $$;
+
+create or replace function public.push_done(ids bigint[], dead text[])
+returns void language sql security definer set search_path = public as $$
+  update push_outbox set status = 'sent' where id = any(ids);
+  delete from push_subs where endpoint = any(dead);
+$$;
+
+-- Confronta i dati FIPAV nuovi con l'ultima copia e mette in coda le notifiche.
+create or replace function public.push_fip(d jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare old jsonb; g jsonb; o jsonb; r jsonb; ro jsonb; n int := 0; won boolean;
+begin
+  if d is null or jsonb_array_length(coalesce(d->'gare', '[]'::jsonb)) < 10 then return -1; end if;
+  select data into old from fip_snap where id = 1;
+  insert into fip_snap(id, data) values (1, d) on conflict (id) do update set data = excluded.data;
+  if old is null then return 0; end if;
+  for g in select * from jsonb_array_elements(d->'gare') loop
+    select x into o from jsonb_array_elements(old->'gare') x where x->>'id' = g->>'id';
+    if o is null then
+      perform _enqueue('partita', null, 'Nuova partita in calendario',
+        _mtitle(g->>'avv', (g->>'casa')::boolean) || ' · ' || _mwhen((g->>'d')::date, g->>'ora')); n := n + 1;
+    elsif coalesce(o->>'ris', '') = '' and coalesce(g->>'ris', '') <> '' then
+      won := case when (g->>'casa')::boolean then split_part(g->>'ris', '-', 1)::int > split_part(g->>'ris', '-', 2)::int
+                  else split_part(g->>'ris', '-', 2)::int > split_part(g->>'ris', '-', 1)::int end;
+      perform _enqueue('ris', null, case when won then 'Vinta! ' else 'Persa ' end || (g->>'ris'),
+        _mtitle(g->>'avv', (g->>'casa')::boolean) || coalesce(' · ' || nullif(g->>'parz', ''), '')); n := n + 1;
+    elsif coalesce(g->>'ris', '') = '' and (o->>'d', o->>'ora', o->>'gym') is distinct from (g->>'d', g->>'ora', g->>'gym') then
+      perform _enqueue('cambi', null, 'Partita spostata',
+        _mtitle(g->>'avv', (g->>'casa')::boolean) || ' · ora ' || _mwhen((g->>'d')::date, g->>'ora') ||
+        coalesce(' · ' || (select x->>'nome' from jsonb_array_elements(d->'gyms') x where x->>'id' = g->>'gym'), '')); n := n + 1;
+    end if;
+  end loop;
+  for r in select * from jsonb_array_elements(coalesce(d->'all', '[]'::jsonb)) loop
+    continue when coalesce(r->>5, '') = '' or r->>3 like 'Univolley%' or r->>4 like 'Univolley%';
+    select x into ro from jsonb_array_elements(old->'all') x where x->>0 = r->>0 and x->>3 = r->>3 and x->>4 = r->>4;
+    if ro is not null and coalesce(ro->>5, '') = '' then
+      perform _enqueue('risAll', null, (r->>0) || 'ª giornata', (r->>3) || ' ' || (r->>5) || ' ' || (r->>4)); n := n + 1;
+    end if;
+  end loop;
+  return n;
+end $$;
+
+-- Promemoria della sera prima (partite e pizza), una volta sola.
+create or replace function public.push_reminders(at_time timestamptz default now())
+returns int language plpgsql security definer set search_path = public as $$
+declare loc timestamp := at_time at time zone 'Europe/Rome'; tom date; g jsonb; m matches; dz record; n int := 0;
+begin
+  if extract(hour from loc) < 18 or extract(hour from loc) >= 23 then return 0; end if;
+  tom := loc::date + 1;
+  for g in select x from fip_snap, jsonb_array_elements(data->'gare') x where fip_snap.id = 1 and (x->>'d')::date = tom loop
+    if _mark('prom:' || (g->>'id') || ':' || tom) then
+      perform _enqueue('prom', null, 'Domani si gioca',
+        _mtitle(g->>'avv', (g->>'casa')::boolean) || ' · ore ' || (g->>'ora') || coalesce(' · ' || _gymname(g->>'gym'), '')); n := n + 1;
+    end if;
+  end loop;
+  for m in select * from matches where matches.d = tom loop
+    if _mark('prom:' || m.id || ':' || tom) then
+      perform _enqueue('prom', null, 'Domani si gioca', _mtitle(m.avv, m.casa) || ' · ore ' || m.ora || coalesce(' · ' || _gymname(m.gym), '')); n := n + 1;
+    end if;
+  end loop;
+  if extract(isodow from tom) = 2 and not exists (select 1 from pizza_skip where pizza_skip.d = tom) then
+    select pd.p, pd.mot, pe.nome || ' ' || pe.cognome as chi into dz
+    from pizza_due pd join people pe on pe.id = pd.p order by pd.ord limit 1;
+    if dz.p is not null and _mark('pizza:' || tom) then
+      perform _enqueue('pizza', null, 'Domani pizza! 🍕', 'Paga ' || dz.chi || ' (' || dz.mot || ')'); n := n + 1;
+    end if;
+  end if;
+  return n;
+end $$;
+
 revoke execute on all functions in schema public from public, anon, authenticated;
 grant execute on function public.login_people(text) to anon, authenticated;
 grant execute on function public.login(text, text, text) to anon, authenticated;
 grant execute on function public.get_state(uuid) to anon, authenticated;
 grant execute on function public.act(uuid, text, jsonb) to anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.push_queue(), public.push_done(bigint[], text[]), public.push_fip(jsonb), public.push_reminders(timestamptz) to service_role;
+  end if;
+end $$;

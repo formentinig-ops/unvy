@@ -69,7 +69,7 @@ async function refresh(quiet){
 }
 async function act(a,x,ok){
   if(BUSY)return false;BUSY=true;
-  try{const r=await rpc('act',{tok:lsGet(TOKK),a,x:x||{}});rtPing();await refresh();if(ok)toast(ok[0],ok[1]);return r||true}
+  try{const r=await rpc('act',{tok:lsGet(TOKK),a,x:x||{}});rtPing();pushFlush();await refresh();if(ok)toast(ok[0],ok[1]);return r||true}
   catch(e){if(e.message==='SESSIONE'){lsSet(TOKK,null);S=null;render()}else toast('Ops',' '+errMsg(e));return false}
   finally{BUSY=false}
 }
@@ -92,6 +92,38 @@ function rtConnect(){
 }
 function rtClose(){if(WS){const w=WS;WS=null;try{w.close()}catch(e){}}}
 const rtPing=()=>rtSend('broadcast',{type:'broadcast',event:'changed',payload:{}});
+/* ---- notifiche push ---- */
+const PUSH_KINDS=[['x','Nuova X o Jolly ricevuta'],['partita','Nuova partita inserita'],['cambi','Partita spostata (orario o palestra)'],['prom','Promemoria il giorno prima della partita'],['ris','Risultato della nostra partita'],['risAll','Risultati delle altre squadre (uno per partita)'],['pizza','Promemoria pizza (lunedì sera)']];
+const pushOK=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const PUSH={endpoint:null};
+const u8=s=>{const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4));return Uint8Array.from(b,c=>c.charCodeAt(0))};
+async function pushEndpoint(){try{const r=await navigator.serviceWorker.ready;const s=await r.pushManager.getSubscription();PUSH.endpoint=s?s.endpoint:null}catch(e){PUSH.endpoint=null}}
+function pushFlush(){try{fetch(CFG.url+'/functions/v1/push',{method:'POST',headers:{apikey:CFG.key,'Content-Type':'application/json'},body:'{"mode":"flush"}',keepalive:true}).catch(()=>{})}catch(e){}}
+async function pushOn(){
+  if(!pushOK())return;
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('Notifiche non attive',' Hai negato il permesso: puoi riattivarlo dalle impostazioni del telefono.');render();return}
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(CFG.vapid)});
+    const j=sub.toJSON();
+    const prefs=Object.fromEntries(PUSH_KINDS.map(([k])=>[k,true]));
+    if(await act('push_sub',{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,prefs})){PUSH.endpoint=j.endpoint;await act('push_test',{});render()}
+  }catch(e){toast('Ops',' Non riesco ad attivare le notifiche su questo telefono.')}
+}
+async function pushOff(){
+  try{const reg=await navigator.serviceWorker.ready;const sub=await reg.pushManager.getSubscription();if(sub){await act('push_unsub',{endpoint:sub.endpoint});await sub.unsubscribe()}}catch(e){}
+  PUSH.endpoint=null;render();
+}
+function notifSection(){
+  const h='<h2>Notifiche</h2>';
+  if(!pushOK())return h+`<div class="card small">${isIOS&&!standalone()?"Su iPhone le notifiche funzionano solo dall'app installata: in Safari tocca Condividi → “Aggiungi alla schermata Home”, poi apri UNVY dall'icona e torna qui.":'Questo browser non supporta le notifiche. Prova con Chrome o Safari aggiornati.'}</div>`;
+  if(Notification.permission==='denied')return h+'<div class="card small">Le notifiche sono bloccate per UNVY. Riattivale dalle impostazioni del telefono, poi torna qui.</div>';
+  const mine=(S.push||[]).find(s=>s.endpoint===PUSH.endpoint);
+  if(!mine)return h+`<div class="card"><p class="small mute" style="margin:0 0 10px">Ricevi gli avvisi anche con l'app chiusa.</p><button class="btn a" style="margin:0" data-a="pushon">Attiva le notifiche</button></div>`;
+  return h+`<div class="list">${PUSH_KINDS.map(([k,l])=>`<label class="set"><span>${l}</span><input type="checkbox" class="sw" data-f="pushpref" data-k="${k}" ${mine.prefs[k]!==false?'checked':''}></label>`).join('')}</div><button class="btn ghost" data-a="pushoff">Disattiva su questo telefono</button>`;
+}
 const catGroups=()=>{const seen=new Set(),out=[];S.cats.forEach(c=>{const k=c.t+c.g;if(!seen.has(k)){seen.add(k);out.push([c.t,c.g])}});return out};
 const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -310,6 +342,7 @@ V.more=()=>{
   return `<h1>Impostazioni</h1>
   <div class="card prof">${jersey(me,64)}<div><b>${esc(me.sopr)}</b><span class="mute">${esc(me.ruolo)}</span><div>${me.min.map(m=>`<span class="tag a">${esc(m)}</span>`).join('')}</div></div></div>
   <button class="btn ghost" data-a="edit">Modifica il mio profilo</button>
+  ${notifSection()}
   ${ges&&S.code?`<h2>Codice squadra</h2><div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><b style="font-size:22px;letter-spacing:.06em">${esc(S.code)}</b><button class="btn sm ghost" data-a="copycode">Copia</button></div>`:''}
   <h2>Permessi</h2><div class="card" style="padding:8px 12px;overflow-x:auto"><table class="ptab"><thead><tr><th>Chi</th><th>X e Jolly</th><th>Partite</th><th>Pizza</th><th>Gestione</th></tr></thead><tbody>${[...S.people].sort((a,b)=>(a.staff-b.staff)||a.cognome.localeCompare(b.cognome)).map(p=>`<tr><td>${esc(p.sopr)}${p.admin?' <span class="mute small">· admin</span>':p.staff?' <span class="mute small">· staff</span>':''}</td>${['x','partite','pizza','gestione'].map(k=>`<td><input type="checkbox" data-f="perm" data-p="${p.id}" data-k="${k}" aria-label="${k}" ${p.perms.includes(k)?'checked':''} ${ges&&!p.admin?'':'disabled'}></td>`).join('')}</tr>`).join('')}</tbody></table></div>
   <h2>Categorie</h2><div class="list">${catGroups().map(([t,g])=>`<button class="set" style="width:100%;border:0;background:none;text-align:left" data-a="cats" data-v="${t+g}"><span><span class="badge ${t}" style="display:inline-grid;width:26px;height:26px;font-size:13px;margin-right:8px">${t}</span>${esc(g)}</span><span class="mute">${S.cats.filter(c=>c.t===t&&c.g===g).length} ›</span></button>`).join('')}</div>
@@ -437,6 +470,7 @@ const A={
   logout:async()=>{try{await rpc('act',{tok:lsGet(TOKK),a:'logout',x:{}})}catch(e){}lsSet(TOKK,null);S=null;RAW='';LG.st=0;rtClose();render()},
   pinreset:v=>act('pin_reset',{p:v},['Fatto',' Al prossimo accesso sceglierà un nuovo PIN.']).then(()=>playerSheet(v)),
   copycode:()=>{try{navigator.clipboard.writeText(S.code).then(()=>toast('Copiato',' Incollalo nel gruppo della squadra.'),()=>toast('Codice',' '+S.code))}catch(e){toast('Codice',' '+S.code)}},
+  pushon:()=>pushOn(),pushoff:()=>pushOff(),
   instok:()=>{lsSet('unvy-inst','1');render()},
   inst:async()=>{if(!DEFERRED)return;DEFERRED.prompt();try{await DEFERRED.userChoice}catch(e){}DEFERRED=null;render()}
 };
@@ -450,6 +484,7 @@ document.addEventListener('change',e=>{
   if(k==='fc'){UI.form.c=t.value;UI.form.q=1;assignSheet()}
   else if(k==='fd')UI.form.d=t.value;
   else if(k==='stato'){const id=t.dataset.p;act('stato_set',{p:id,stato:t.value}).then(()=>playerSheet(id))}
+  else if(k==='pushpref'){const mine=(S.push||[]).find(s=>s.endpoint===PUSH.endpoint);if(mine)act('push_prefs',{endpoint:PUSH.endpoint,prefs:{...mine.prefs,[t.dataset.k]:t.checked}})}
   else if(k==='perm'){act('perm_set',{p:t.dataset.p,k:t.dataset.k,on:t.checked})}
   else if(k==='photo'&&t.files[0]){const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d'),s=Math.min(im.width,im.height);x.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,160,160);act('profile',{foto:c.toDataURL('image/jpeg',.8)}).then(()=>editSheet())};im.src=r.result};r.readAsDataURL(t.files[0])}
   else if(t.id==='mg')$('#ng').hidden=t.value!=='new';
@@ -479,7 +514,7 @@ async function boot(){
   setInterval(()=>{if(document.visibilityState==='visible'&&S)refresh(true)},30000);
   setInterval(()=>{if(document.visibilityState==='visible')loadFip().then(()=>S&&render())},5*60000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S){rtConnect();refresh(true);loadFip().then(()=>render())}});
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});if(pushOK())pushEndpoint().then(()=>{if(S&&UI.tab==='more')render()})}
 }
 boot();
 }
