@@ -248,7 +248,8 @@ begin
 
   if a = 'entries_add' then
     if not exists (select 1 from cats where id = x->>'c' and t = x->>'t' and attiva) then raise exception 'DATI'; end if;
-    stt := case when can_x then 'ok' else 'prop' end;
+    if not can_x then raise exception 'PERMESSO'; end if;
+    stt := 'ok';
     for pid in select jsonb_array_elements_text(x->'p') loop
       if not exists (select 1 from people where id = pid and stato <> 'fuori') then raise exception 'DATI'; end if;
       insert into entries(t, p, c, q, d, n, da, st)

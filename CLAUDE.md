@@ -69,7 +69,8 @@ cd supabase/functions/push && curl -s -X POST "https://api.supabase.com/v1/proje
   "Cartellino rosso" vale 2 X; "Ritardo ++ (ogni 3 minuti)" e "Materiale dimenticato in palestra" si danno a quantità.
   Più X uguali nello stesso giorno sono normali.
 - **Jolly** = X al contrario (−3 €). Totale giocatore = (X − Jolly) × 3 €; se negativo la cassa gli deve la differenza.
-- Chiunque può **proporre** una X; la assegna chi ha il permesso `x`. "Assurda" respinge e dà una X al proponente.
+- **Niente proposte** nell'app: le X si discutono a voce e le assegna solo chi ha il permesso `x` (decisione dell'Admin).
+- Il pulsante "Assegna" gestisce X, Jolly e Pizze (le pizze con il permesso `pizza`).
 - Stato partecipazione: `gioca`, `esonerato` (quota 150 €, resta in classifica), `fuori` (staff). Le multe si pagano a fine anno, fuori dall'app.
 - **Pizza**: il martedì dopo l'allenamento, 75 €. Solo per motivi del regolamento (compleanno, laurea, esordio, assenza a partita…),
   coda in ordine di inserimento, un martedì per pizza; martedì saltabili. Nessuna rotazione.

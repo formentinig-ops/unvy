@@ -204,9 +204,8 @@ const V={};
 V.home=()=>{
   const c=cassa(),r=rank(),top=[r[1],r[0],r[2]],H=[86,120,62];
   const nm=S.matches.filter(m=>m.d>=T).sort((a,b)=>a.d.localeCompare(b.d))[0];
-  const z=pizzaSched(4).find(x=>!x.skip);const props=S.entries.filter(e=>e.st==='prop').length;
-  return `${props&&can('x')?`<button class="card" style="width:100%;text-align:left;display:flex;gap:10px;align-items:center;margin-bottom:12px;border-color:var(--acc)" data-a="xseg" data-v="pr">${ic('bell')}<span><b>${props} proposte di X</b> da valutare</span></button>`:''}
-  <section class="card cassa"><div class="lbl">Cassa X · Serie C 26/27</div><div class="big num">${eur(c.tot)}</div>
+  const z=pizzaSched(4).find(x=>!x.skip);
+  return `  <section class="card cassa"><div class="lbl">Cassa X · Serie C 26/27</div><div class="big num">${eur(c.tot)}</div>
   <div class="trio"><div><b class="num">${c.x}</b><span>X assegnate</span></div><div class="j"><b class="num">${c.j}</b><span>Jolly</span></div></div></section>
   <h2>Classifica X</h2>
   <div class="podium">${top.map((t,i)=>t?`<button class="pod p${[2,1,3][i]}" style="border:0;background:none;padding:0" data-a="player" data-v="${t.p.id}">${jersey(t.p,i===1?60:48)}<div class="nm">${esc(t.p.sopr)}</div><div class="eu num">${eur(t.net)}</div><div class="blk" style="height:${H[i]}px">${[2,1,3][i]}</div></button>`:'<div></div>').join('')}</div>
@@ -217,8 +216,8 @@ V.home=()=>{
   ${z?`<button class="card ev" style="width:100%;text-align:left" data-a="pztab">${whenBox(z.d)}<div><span class="tag x">${esc(z.why)}</span><div class="evt">Paga ${esc(P(z.p).sopr)}</div><div class="mute small">75 € · 5 mezzi metri</div></div></button>`:'<div class="card empty">Nessuno deve la pizza. Per ora.</div>'}`;
 };
 V.x=()=>{
-  const props=S.entries.filter(e=>e.st==='prop');
-  let h=`<h1>X e Jolly</h1><div class="seg">${[['cl','Classifica'],['mv','Movimenti'],['pr','Proposte'+(props.length?' · '+props.length:'')]].map(([k,l])=>`<button class="${UI.xseg===k?'on':''}" data-a="xseg" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if(UI.xseg!=='mv')UI.xseg='cl';
+  let h=`<h1>X e Jolly</h1><div class="seg">${[['cl','Classifica'],['mv','Movimenti']].map(([k,l])=>`<button class="${UI.xseg===k?'on':''}" data-a="xseg" data-v="${k}">${l}</button>`).join('')}</div>`;
   if(UI.xseg==='cl'){
     h+=`<div class="list">${rank().map((t,i)=>`<button class="row" data-a="player" data-v="${t.p.id}"><span class="rk">${i+1}</span>${jersey(t.p,36)}<span class="who"><b>${esc(t.p.sopr)}</b><span>${esc(t.p.ruolo)}</span><span class="cnt"><span class="xx">${t.x} X</span>${t.j?`<span class="jj">${t.j} Jolly</span>`:''}</span></span><span class="eur num"${t.net<0?' style="color:var(--acc)"':''}>${t.net<0?'+'+eur(-t.net):eur(t.net)}${t.p.stato==='esonerato'?'<small>esonerato</small>':t.net<0?'<small>da ricevere</small>':''}</span></button>`).join('')}</div>`;
   }else if(UI.xseg==='mv'){
@@ -228,14 +227,12 @@ V.x=()=>{
     L.slice(0,80).forEach(e=>{const m=e.d.slice(0,7);if(m!==cur){if(open)h+='</div>';cur=m;const d=parse(e.d);h+=`<div class="mon">${MF[d.getMonth()]} ${d.getFullYear()}</div><div class="list">`;open=true}
       h+=`<button class="row mv" data-a="entry" data-v="${e.id}"><span class="badge ${e.t}">${e.t==='X'?'X':'J'}</span><span class="who"><b>${esc(P(e.p).sopr)}${e.q>1?' ×'+e.q:''}</b><span>${esc(C(e.c).nome)}</span></span><span class="small mute num">${fd(e.d)}</span></button>`});
     if(open)h+='</div>';if(!L.length)h+='<div class="empty">Nessun movimento</div>';
-  }else{
-    h+=props.length?`<div class="list">${props.map(e=>`<div class="row mv" style="grid-template-columns:auto minmax(0,1fr)"><span class="badge X">X</span><span class="who"><b>${esc(P(e.p).sopr)} · ${esc(C(e.c).nome)}</b><span>Proposta da ${esc(P(e.by).sopr)} · ${fd(e.d)}${e.n?' · “'+esc(e.n)+'”':''}</span>${can('x')?`<span style="display:flex;gap:6px;margin-top:8px"><button class="btn sm a" data-a="appr" data-v="${e.id}">Assegna</button><button class="btn sm ghost" data-a="rej" data-v="${e.id}">Respingi</button><button class="btn sm ghost" data-a="absurd" data-v="${e.id}">Assurda</button></span>`:'<span class="small mute">In attesa di un ministro</span>'}</span></div>`).join('')}</div>`:'<div class="empty">Nessuna proposta in attesa</div>';
   }
   return h;
 };
 V.cal=()=>{
   PZ=pizzaSched(40);
-  let h=`<h1>Calendario</h1><div class="seg">${[['ag','Calendario'],['pz','Pizza'+(S.pizza.due.length?' · '+S.pizza.due.length:'')]].map(([k,l])=>`<button class="${UI.cseg===k?'on':''}" data-a="cseg" data-v="${k}">${l}</button>`).join('')}</div>`;
+  let h=`<h1>Calendario</h1><div class="seg">${[['ag','Calendario'],['pz','Pizza']].map(([k,l])=>`<button class="${UI.cseg===k?'on':''}" data-a="cseg" data-v="${k}">${l}</button>`).join('')}</div>`;
   if(UI.cseg==='pz')return h+pizzaView();
   h+=`<div class="vsw">${[['sett','Settimana'],['mese','Mese'],['lista','Elenco']].map(([k,l])=>`<button class="chip ${UI.cv===k?'on':''}" data-a="cv" data-v="${k}">${l}</button>`).join('')}</div>`;
   if(UI.cv==='sett')h+=weekView();else if(UI.cv==='mese')h+=monthView();else h+=listView();
@@ -324,12 +321,10 @@ function campView(){
 }
 function pizzaView(){
   const pz=S.pizza,ok=can('pizza'),sch=pizzaSched(pz.due.length+8);
-  let h=`<p class="mute" style="margin-top:-4px">Chi deve la pizza la porta il primo martedì libero, in ordine di arrivo. 75 € · 4 farciti e 1 margherita.</p>`;
+  let h='';
   h+=`<div class="list">${sch.length?sch.map((z,n)=>`<div class="qrow" style="grid-template-columns:auto minmax(0,1fr) auto">${whenBox(z.d)}<div>${z.skip?'<div class="evt mute">Martedì saltato</div>':`<div class="evt">${esc(P(z.p).sopr)}</div><span class="tag x">${esc(z.why)}</span>`}${ok?`<span style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${z.skip?`<button class="btn sm ghost" data-a="pskip" data-v="${z.d}">Ripristina martedì</button>`:`${n===0||sch.slice(0,n).every(x=>x.skip)?`<button class="btn sm a" data-a="ppaid" data-v="${z.id}|${z.d}">Pagata</button>`:''}<button class="btn sm ghost" data-a="pskip" data-v="${z.d}">Salta martedì</button><button class="btn sm ghost" data-a="pdel" data-v="${z.id}">Togli</button>`}</span>`:''}</div><span></span></div>`).join(''):'<div class="empty">Nessuno deve la pizza</div>'}</div>`;
-  if(ok)h+=`<button class="btn" data-a="pdue">Aggiungi pizza dovuta</button>`;
   h+=`<h2>Già pagate</h2><div class="list">${pz.hist.length?[...pz.hist].reverse().map(x=>`<div class="qrow"><span>${jersey(P(x.p),28)}</span><div><b>${esc(P(x.p).sopr)}</b> <span class="mute small">· ${esc(x.mot)}</span></div><span class="small mute num">${fd(x.d)}</span></div>`).join(''):'<div class="empty">Nessuna</div>'}</div>`;
-  h+=`<h2>Quando si deve la pizza</h2><div class="card small">${PIZZA_MOT.join(' · ')}</div>`;
-  return h+`<p class="mute small">La gestisce il Ministro della pizza (${esc(S.people.filter(p=>p.perms.includes('pizza')).map(p=>p.sopr).join(', '))}).</p>`;
+  return h;
 }
 V.team=()=>{
   const grp=(t,L)=>`<h2>${t}</h2><div class="list">${L.map(p=>`<button class="row" style="grid-template-columns:auto minmax(0,1fr) auto" data-a="player" data-v="${p.id}">${jersey(p,40)}<span class="who"><b>${esc(p.sopr)}</b><span>${esc(p.ruolo)}</span>${p.min.length?`<span style="display:block;margin-top:4px">${p.min.map(m=>`<span class="tag a">${esc(m)}</span>`).join('')}</span>`:''}</span><span class="eur num" style="font-size:22px">${p.num??''}</span></button>`).join('')}</div>`;
@@ -373,21 +368,29 @@ function entrySheet(id){
   <div class="list" style="margin-top:14px"><div class="set"><span>Motivo</span><b style="text-align:right">${esc(c.nome)}</b></div><div class="set"><span>Quantità</span><b>${units(e)} ${e.t==='X'?'X':'Jolly'} · ${eur(units(e)*S.valX)}</b></div><div class="set"><span>Assegnata da</span><b>${esc(P(e.by).sopr)}</b></div>${e.n?`<div class="set"><span>Nota</span><span style="text-align:right">${esc(e.n)}</span></div>`:''}</div>
   ${can('x')?`<button class="btn ghost" data-a="del" data-v="${e.id}">Annulla questa ${e.t==='X'?'X':'Jolly'}</button>`:''}`);
 }
-function assignSheet(pre){
-  if(!UI.form)UI.form={t:'X',p:pre?[pre]:[],c:'',q:1,d:T,n:''};
-  const f=UI.form,adm=can('x'),cats=S.cats.filter(c=>c.t===f.t),cat=S.cats.find(c=>c.id===f.c);
-  const groups=[...new Set(cats.map(c=>c.g))];
-  const pl=S.people.filter(p=>p.stato!=='fuori');
-  sheet(`<h1 style="font-size:26px;margin-top:8px">${adm?'Assegna':'Proponi'}</h1>
-  <div class="seg"><button class="${f.t==='X'?'on':''}" data-a="ft" data-v="X">X</button><button class="${f.t==='J'?'on':''}" data-a="ft" data-v="J">Jolly</button></div>
-  <label class="f">A chi${f.p.length?' · '+f.p.length:''}</label><div class="chips">${pl.map(p=>`<button class="chip ${f.p.includes(p.id)?(f.t==='J'?'onJ':'on'):''}" data-a="fp" data-v="${p.id}">${esc(p.sopr)}</button>`).join('')}</div>
+function assignModes(){return [...(can('x')?[['X','X'],['J','Jolly']]:[]),...(can('pizza')?[['P','Pizza']]:[])]}
+function assignSheet(pre,mode){
+  const modes=assignModes();if(!modes.length)return;
+  if(!UI.form)UI.form={t:mode&&modes.some(m=>m[0]===mode)?mode:modes[0][0],p:pre?[pre]:[],c:'',q:1,d:T,n:'',mot:''};
+  const f=UI.form,pz=f.t==='P';
+  const pl=S.people.filter(p=>pz?!p.staff:p.stato!=='fuori');
+  const seg=modes.length>1?`<div class="seg">${modes.map(([k,l])=>`<button class="${f.t===k?'on':''}" data-a="ft" data-v="${k}">${l}</button>`).join('')}</div>`:'';
+  const chips=`<label class="f">${pz?'Chi paga':'A chi'}${f.p.length?' · '+f.p.length:''}</label><div class="chips">${pl.map(p=>`<button class="chip ${f.p.includes(p.id)?(f.t==='X'?'on':'onJ'):''}" data-a="fp" data-v="${p.id}">${esc(p.sopr)}</button>`).join('')}</div>`;
+  if(pz){
+    sheet(`<h1 style="font-size:26px;margin-top:8px">Assegna</h1>${seg}${chips}
+    <label class="f" for="fm">Motivo</label><select id="fm" class="inp" data-f="fm"><option value="">Scegli dal regolamento…</option>${PIZZA_MOT.map(m=>`<option ${m===f.mot?'selected':''}>${esc(m)}</option>`).join('')}</select>
+    ${f.p.length?`<div class="note">${f.p.length===1?'1 pizza':f.p.length+' pizze'}: ${f.p.length===1?'esce':'escono'} nei primi martedì liberi, dopo quelle già in coda.</div>`:''}
+    <button class="btn a" data-a="fsave" ${f.p.length&&f.mot?'':'disabled style="opacity:.4"'}>Aggiungi pizza</button>`);
+    return;
+  }
+  const cats=S.cats.filter(c=>c.t===f.t),cat=S.cats.find(c=>c.id===f.c),groups=[...new Set(cats.map(c=>c.g))];
+  sheet(`<h1 style="font-size:26px;margin-top:8px">Assegna</h1>${seg}${chips}
   <label class="f" for="fc">Motivo</label><select id="fc" class="inp" data-f="fc"><option value="">Scegli dal regolamento…</option>${groups.map(g=>`<optgroup label="${esc(g)}">${cats.filter(c=>c.g===g).map(c=>`<option value="${c.id}" ${c.id===f.c?'selected':''}>${esc(c.nome)}${c.u>1?' ('+c.u+' X)':''}</option>`).join('')}</optgroup>`).join('')}</select>
   ${cat&&cat.q?`<label class="f">${cat.nome.includes('kg')?'Chili dimostrati':cat.nome.includes('minuti')?'Blocchi da 3 minuti':'Quanti oggetti'}</label><div class="step"><button data-a="fq" data-v="-1" aria-label="Meno">−</button><b>${f.q}</b><button data-a="fq" data-v="1" aria-label="Più">+</button></div>`:''}
   <label class="f" for="fd">Data</label><input id="fd" type="date" class="inp" value="${f.d}" data-f="fd">
   <label class="f" for="fn">Nota (facoltativa)</label><input id="fn" class="inp" value="${esc(f.n)}" placeholder="Es. pallone lasciato sotto la panchina" data-f="fn">
   ${cat?`<div class="note">${f.p.length===1?"1 persona":(f.p.length||0)+" persone"} × ${cat.u*f.q} ${f.t==='X'?'X':'Jolly'} = ${eur((f.p.length||0)*cat.u*f.q*S.valX)}${f.t==='J'?' a favore':''}</div>`:''}
-  <button class="btn ${f.t==='J'?'a':''}" data-a="fsave" ${f.p.length&&f.c?'':'disabled style="opacity:.4"'}>${adm?'Assegna e avvisa':'Invia la proposta'}</button>
-  ${adm?'':'<p class="mute small">La proposta va a capitano, vice e Ministro delle X. Occhio: una proposta assurda vale una X.</p>'}`);
+  <button class="btn ${f.t==='J'?'a':''}" data-a="fsave" ${f.p.length&&f.c?'':'disabled style="opacity:.4"'}>Assegna e avvisa</button>`);
 }
 function matchSheet(id){
   const m=S.matches.find(x=>x.id===id)||{id:'',avv:'',casa:true,gym:FIP.home,d:iso(add(TODAY,(6-TODAY.getDay()+7)%7||7)),ora:'21:00'};
@@ -423,7 +426,8 @@ function render(){
   $('#view').innerHTML=(UI.tab==='home'?installCard():'')+V[UI.tab]();
   $('#meBtn').innerHTML=jersey(ME(),54);
   const fab=$('#fab');
-  if(UI.tab==='home'||UI.tab==='x'){fab.hidden=false;fab.innerHTML=ic('plus')+(can('x')?'Assegna':'Proponi X');fab.dataset.a='assign';fab.dataset.v=''}
+  if((UI.tab==='home'||UI.tab==='x')&&assignModes().length){fab.hidden=false;fab.innerHTML=ic('plus')+'Assegna';fab.dataset.a='assign';fab.dataset.v=''}
+  else if(UI.tab==='cal'&&UI.cseg==='pz'&&can('pizza')){fab.hidden=false;fab.innerHTML=ic('plus')+'Pizza';fab.dataset.a='assign';fab.dataset.v='|P'}
   else if(UI.tab==='cal'&&UI.cseg==='ag'&&can('partite')){fab.hidden=false;fab.innerHTML=ic('plus')+'Partita';fab.dataset.a='match';fab.dataset.v=''}
   else fab.hidden=true;
 }
@@ -431,18 +435,21 @@ const A={
   tab:v=>{UI.tab=v;$('#view').scrollTop=0;render()},
   xseg:v=>{UI.tab='x';UI.xseg=v;render()},xf:v=>{UI.xf=v;render()},cseg:v=>{UI.cseg=v;render()},camp:()=>{UI.tab='camp';UI.cpv='cl';render()},cpv:v=>{UI.cpv=v;render()},gio:v=>{UI.gio=Math.min(UI.maxG||26,Math.max(1,UI.gio+Number(v)));render()},
   player:v=>playerSheet(v),entry:v=>entrySheet(v),close:()=>close(),
-  assign:v=>{UI.form=null;assignSheet(v||null)},
-  ft:v=>{UI.form.t=v;UI.form.c='';UI.form.q=1;assignSheet()},
+  assign:v=>{const [p,m]=(v||'').split('|');UI.form=null;assignSheet(p||null,m||null)},
+  ft:v=>{const f=UI.form;f.t=v;f.c='';f.q=1;f.mot='';if(v==='P')f.p=f.p.filter(id=>!P(id).staff);else f.p=f.p.filter(id=>P(id).stato!=='fuori');assignSheet()},
   fp:v=>{const a=UI.form.p;a.includes(v)?a.splice(a.indexOf(v),1):a.push(v);assignSheet()},
   fq:v=>{UI.form.q=Math.max(1,UI.form.q+Number(v));assignSheet()},
-  fsave:async()=>{const f=UI.form;if(!f.p.length||!f.c)return;const adm=can('x');
+  fsave:async()=>{const f=UI.form;if(!f.p.length)return;
+    if(f.t==='P'){
+      if(!f.mot)return;let ok=0;
+      for(const p of f.p){if(await act('pizza_add',{p,mot:f.mot}))ok++;else break}
+      if(ok){const names=f.p.slice(0,ok).map(id=>P(id).sopr).join(', ');close();toast('Fatto',` ${names}: pizza (${f.mot})`)}
+      return;
+    }
+    if(!f.c)return;
     const r=await act('entries_add',{t:f.t,p:f.p,c:f.c,q:f.q,d:f.d,n:f.n.trim()});
-    if(r){const names=f.p.map(id=>P(id).sopr).join(', '),cn=C(f.c).nome;close();
-      adm?toast('Fatto',` ${names}: ${f.t==='X'?'nuova X':'nuovo Jolly'} · ${cn}`):toast('Proposta inviata',' Ora decide un ministro.')}},
+    if(r){const names=f.p.map(id=>P(id).sopr).join(', '),cn=C(f.c).nome;close();toast('Fatto',` ${names}: ${f.t==='X'?'nuova X':'nuovo Jolly'} · ${cn}`)}},
   del:v=>act('entry_del',{id:v}).then(r=>r&&close()),
-  appr:v=>act('entry_appr',{id:v},['Fatto',' X assegnata.']),
-  rej:v=>act('entry_rej',{id:v},['Fatto',' Proposta respinta.']),
-  absurd:v=>act('entry_absurd',{id:v},['Fatto',' Proposta respinta: X a chi l\'ha fatta.']),
   match:v=>matchSheet(v),
   mcasa:v=>{$('#mc').value=v;document.querySelectorAll('[data-a=mcasa]').forEach(b=>b.classList.toggle('on',b.dataset.v===v));const g=$('#mg');if(v==='1')g.value=FIP.home},
   mdel:v=>act('match_del',{id:v}).then(r=>r&&close()),
@@ -455,7 +462,6 @@ const A={
   mo:v=>{UI.mo=v==='0'?0:UI.mo+Number(v);UI.sel=v==='0'?T:null;if(v!=='0'){const d=new Date(TODAY.getFullYear(),TODAY.getMonth()+UI.mo,1);UI.sel=iso(d)}render()},
   sel:v=>{UI.sel=v;render()},
   ev:v=>{const [k,t]=v.split('|');PZ=pizzaSched(40);const e=evs(k).find(x=>x.k===t);if(e)sheet(`<div class="mon" style="margin-top:6px">${fd(k)}</div><div class="card">${evBody(e)}</div>`)},
-  pdue:()=>sheet(`<h1 style="font-size:26px;margin-top:8px">Pizza dovuta</h1><form id="pf"><label class="f" for="pp">Chi paga</label><select id="pp" class="inp">${S.people.filter(p=>!p.staff).map(p=>`<option value="${p.id}">${esc(p.sopr)}</option>`).join('')}</select><label class="f" for="pm">Motivo</label><select id="pm" class="inp">${PIZZA_MOT.map(m=>`<option>${m}</option>`).join('')}</select><button class="btn">Aggiungi</button></form>`),
   edit:()=>editSheet(),
   cats:v=>catsSheet(v),
   lgp:v=>{LG.pid=v;LG.st=2;LG.pin='';LG.first='';LG.err='';render()},
@@ -483,6 +489,7 @@ document.addEventListener('change',e=>{
   const t=e.target,k=t.dataset.f;
   if(k==='fc'){UI.form.c=t.value;UI.form.q=1;assignSheet()}
   else if(k==='fd')UI.form.d=t.value;
+  else if(k==='fm'){UI.form.mot=t.value;assignSheet()}
   else if(k==='stato'){const id=t.dataset.p;act('stato_set',{p:id,stato:t.value}).then(()=>playerSheet(id))}
   else if(k==='pushpref'){const mine=(S.push||[]).find(s=>s.endpoint===PUSH.endpoint);if(mine)act('push_prefs',{endpoint:PUSH.endpoint,prefs:{...mine.prefs,[t.dataset.k]:t.checked}})}
   else if(k==='perm'){act('perm_set',{p:t.dataset.p,k:t.dataset.k,on:t.checked})}
@@ -503,7 +510,6 @@ document.addEventListener('submit',async e=>{
     const nuova=!x.id;
     if(await act('match_save',x)){close();if(nuova)toast('Partita inserita',` ${x.avv}, ${fd(x.d)} ore ${x.ora}`)}
   }
-  else if(id==='pf'){const pp=$('#pp').value;if(await act('pizza_add',{p:pp,mot:$('#pm').value})){close();UI.cseg='pz';render();toast('Fatto',` ${P(pp).sopr} deve una pizza`)}}
   else if(id==='ef'){if(await act('profile',{nome:$('#en').value,cognome:$('#ec').value,sopr:$('#es').value,num:$('#eu').value,ruolo:$('#er').value}))close()}
 });
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();DEFERRED=e;render()});
