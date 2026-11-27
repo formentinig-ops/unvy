@@ -175,7 +175,7 @@ const goBtn=g=>`<a class="go" href="${esc(mapsUrl(g.addr))}" target="_blank" rel
 function pizzaSched(n){
   const pz=S.pizza,out=[],t=add(TODAY,(2-TODAY.getDay()+7)%7);let i=0;
   for(let w=0;w<60&&i<pz.due.length&&out.length<n;w++){const d=iso(add(t,7*w));
-    if(pz.skip[d]){out.push({d,skip:true});continue}
+    if(pz.skip[d]||((S.training||{})[d]||{}).annullato){out.push({d,skip:true});continue}
     const x=pz.due[i];out.push({d,p:x.p,why:x.mot,i,id:x.id});i++}
   return out;
 }
@@ -186,7 +186,10 @@ let PZ=[];
 function evs(k){
   const wd=parse(k).getDay(),it=[];
   S.matches.filter(m=>m.d===k).forEach(m=>it.push({k:'m',ini:m.ora,fine:plus(m.ora,120),m}));
-  if(TR[wd])it.push({k:'a',ini:TR[wd][0],fine:TR[wd][1]});
+  const ex=(S.training||{})[k];
+  if(ex&&ex.annullato){if(TR[wd])it.push({k:'a',ini:TR[wd][0],fine:TR[wd][1],off:true,d:k,ex})}
+  else if(ex&&ex.ini)it.push({k:'a',ini:ex.ini,fine:ex.fine||plus(ex.ini,120),d:k,ex});
+  else if(TR[wd])it.push({k:'a',ini:TR[wd][0],fine:TR[wd][1],d:k});
   const z=PZ.find(z=>z.d===k&&!z.skip)||(h=>h&&{d:k,p:h.p,why:h.mot+' · pagata'})(S.pizza.hist.find(h=>h.d===k));if(z)it.push({k:'z',ini:'22:45',fine:'23:30',z});
   return it.sort((a,b)=>a.ini.localeCompare(b.ini));
 }
@@ -195,7 +198,9 @@ const risHtml=m=>m.ris?`<div style="margin-top:6px"><span class="tag ${(m.casa?m
 const srcTag=m=>m.fip?`<span class="tag">${m.g}ª giornata</span>`:'<span class="tag">Amichevole</span>';
 function evBody(e){
   if(e.k==='m'){const m=e.m,g=gym(m.gym);return `<div><span class="tag m">Partita ${esc(m.ora)}</span><span class="tag ${m.casa?'a':''}">${m.casa?'Casa':'Trasferta'}</span>${srcTag(m)}<div class="evt">${esc(mTitle(m))}</div>${risHtml(m)}<div class="mute small">${esc(g.nome)} · ${esc(g.addr)}</div>${m.ris?'':goBtn(g)}${can('partite')&&!m.fip?` <button class="btn sm ghost" data-a="match" data-v="${m.id}">Modifica</button>`:''}</div>`}
-  if(e.k==='a'){const g=gym(FIP.home);return `<div><span class="tag">Allenamento</span><div class="evt num">${e.ini} – ${e.fine}</div><div class="mute small">${esc(g.nome)} · arrivo entro 20:45</div>${goBtn(g)}</div>`}
+  if(e.k==='a'){const g=gym(FIP.home),mod=can('partite')&&e.d?` <button class="btn sm ghost" data-a="tr" data-v="${e.d}">Modifica</button>`:'';
+    if(e.off)return `<div><span class="tag x">Allenamento annullato</span><div class="evt num" style="text-decoration:line-through;opacity:.6">${e.ini} – ${e.fine}</div>${e.ex&&e.ex.nota?`<div class="mute small">${esc(e.ex.nota)}</div>`:''}${mod}</div>`;
+    return `<div><span class="tag">Allenamento</span>${e.ex?'<span class="tag a">Orario speciale</span>':''}<div class="evt num">${e.ini} – ${e.fine}</div><div class="mute small">${esc(g.nome)}${e.ex&&e.ex.nota?' · '+esc(e.ex.nota):' · arrivo entro 20:45'}</div>${goBtn(g)}${mod}</div>`}
   const z=e.z;return `<div><span class="tag x">Pizza</span><div class="evt">Paga ${esc(P(z.p).sopr)}</div><div class="mute small">${esc(z.why)} · 75 € · 5 mezzi metri</div></div>`;
 }
 const whenBox=d=>{const x=parse(d);return `<div class="when"><span>${GG[x.getDay()]}</span><b>${x.getDate()}</b><span>${MM[x.getMonth()]}</span></div>`};
@@ -209,6 +214,7 @@ V.home=()=>{
   const z=pizzaSched(4).find(x=>!x.skip);
   return `  <section class="card cassa"><div class="lbl">Cassa X · Serie C 26/27</div><div class="big num">${eur(c.tot)}</div>
   <div class="trio"><div><b class="num">${c.x}</b><span>X assegnate</span></div><div class="j"><b class="num">${c.j}</b><span>Jolly</span></div></div></section>
+  ${myBox()}
   <h2>Classifica X</h2>
   <div class="podium">${top.map((t,i)=>t?`<button class="pod p${[2,1,3][i]}" style="border:0;background:none;padding:0" data-a="player" data-v="${t.p.id}">${jersey(t.p,i===1?60:48)}<div class="nm">${esc(t.p.sopr)}</div><div class="eu num">${eur(t.net)}</div><div class="blk" style="height:${H[i]}px">${[2,1,3][i]}</div></button>`:'<div></div>').join('')}</div>
   <button class="link" data-a="tab" data-v="x">Classifica completa</button>
@@ -217,6 +223,12 @@ V.home=()=>{
   <h2>Prossima pizza</h2>
   ${z?`<button class="card ev" style="width:100%;text-align:left" data-a="pztab">${whenBox(z.d)}<div><span class="tag x">${esc(z.why)}</span><div class="evt">Paga ${esc(P(z.p).sopr)}</div><div class="mute small">75 € · 5 mezzi metri</div></div></button>`:'<div class="card empty">Nessuno deve la pizza. Per ora.</div>'}`;
 };
+function myBox(){
+  const me=ME();if(me.stato==='fuori')return '';
+  const r=rank(),i=r.findIndex(t=>t.p.id===me.id);if(i<0)return '';const t=r[i];
+  const val=me.stato==='esonerato'?'quota '+eur(S.quota):t.net<0?'ricevi '+eur(-t.net):eur(t.net);
+  return `<h2>Le tue X</h2><button class="card" style="width:100%;text-align:left;display:flex;align-items:center;gap:14px" data-a="player" data-v="${me.id}">${jersey(me,44)}<span style="flex:1"><b style="font-size:22px;font-stretch:112%">${val}</b><span class="small mute" style="display:block">${t.x} X${t.j?' · '+t.j+' Jolly':''} · ${i+1}° in classifica</span></span><span class="mute">›</span></button>`;
+}
 V.x=()=>{
   if(!['mv','st'].includes(UI.xseg))UI.xseg='cl';
   let h=`<h1>X e Jolly</h1><div class="seg">${[['cl','Classifica'],['mv','Movimenti'],['st','Statistiche']].map(([k,l])=>`<button class="${UI.xseg===k?'on':''}" data-a="xseg" data-v="${k}">${l}</button>`).join('')}</div>`;
@@ -269,7 +281,7 @@ V.cal=()=>{
 };
 function summaryRows(){
   const lab={m:'Partita',a:'Allenamento',z:'Pizza'};
-  const desc=e=>e.k==='m'?mTitle(e.m)+' · '+e.ini:e.k==='a'?'Allenamento '+e.ini+' – '+e.fine:'Pizza · paga '+P(e.z.p).sopr;
+  const desc=e=>e.k==='m'?mTitle(e.m)+' · '+e.ini:e.k==='a'?(e.off?'Allenamento annullato':'Allenamento '+e.ini+' – '+e.fine):'Pizza · paga '+P(e.z.p).sopr;
   let tE=evs(T),day=T;
   let r1;
   if(tE.length)r1=`<button class="srow" data-a="ev" data-v="${T}|${tE[0].k}"><span class="sk">Oggi</span><span class="sv">${esc(tE.map(desc).join(' · '))}</span><span class="mute">›</span></button>`;
@@ -281,7 +293,7 @@ function summaryRows(){
 }
 function weekView(){
   const mon=add(TODAY,-((TODAY.getDay()+6)%7)+7*UI.wk),days=[...Array(7)].map((_,i)=>add(mon,i)),E=days.map(d=>evs(iso(d)));
-  let h0=19,h1=23;E.flat().filter(e=>e.k!=='z').forEach(e=>{h0=Math.min(h0,Math.floor(hm(e.ini)/60));h1=Math.max(h1,Math.ceil(hm(e.fine)/60))});h1=Math.min(h1,24);
+  let h0=19,h1=23;E.flat().filter(e=>e.k!=='z'&&!e.off).forEach(e=>{h0=Math.min(h0,Math.floor(hm(e.ini)/60));h1=Math.max(h1,Math.ceil(hm(e.fine)/60))});h1=Math.min(h1,24);
   const PX=52,H=(h1-h0)*PX,sun=days[6];
   const ttl=mon.getMonth()===sun.getMonth()?`${mon.getDate()} – ${sun.getDate()} ${MM[sun.getMonth()]}`:`${mon.getDate()} ${MM[mon.getMonth()]} – ${sun.getDate()} ${MM[sun.getMonth()]}`;
   const nowM=new Date().getHours()*60+new Date().getMinutes();
@@ -290,7 +302,7 @@ function weekView(){
   g+=`<div class="adl">pizza</div>${days.map((d,i)=>`<div class="ad">${E[i].filter(e=>e.k==='z').map(e=>`<button class="chipz" data-a="ev" data-v="${iso(d)}|z">${esc(P(e.z.p).sopr)}</button>`).join('')}</div>`).join('')}`;
   g+=`<div class="hrs" style="height:${H}px">${[...Array(h1-h0)].map((_,i)=>i?`<span style="top:${i*PX}px">${h0+i}</span>`:'').join('')}</div>`;
   g+=days.map((d,i)=>{const k=iso(d),td=k===T;
-    return `<div class="col ${td?'td':''}" style="height:${H}px;--hh:${PX}px">${E[i].filter(e=>e.k!=='z').map(e=>{const top=(hm(e.ini)-h0*60)/60*PX,ht=Math.max(34,(hm(e.fine)-hm(e.ini))/60*PX-2);
+    return `<div class="col ${td?'td':''}" style="height:${H}px;--hh:${PX}px">${E[i].filter(e=>e.k!=='z'&&!e.off).map(e=>{const top=(hm(e.ini)-h0*60)/60*PX,ht=Math.max(34,(hm(e.fine)-hm(e.ini))/60*PX-2);
       const lab=e.k==='m'?(e.m.casa?'vs ':'@ ')+e.m.avv:'Allen.';
       return `<button class="blk2 ${e.k}" style="top:${top}px;height:${ht}px" data-a="ev" data-v="${k}|${e.k}">${esc(lab)}<small>${e.ini}</small></button>`}).join('')}${td&&nowM>=h0*60&&nowM<=h1*60?`<div class="now" style="top:${(nowM-h0*60)/60*PX}px"></div>`:''}</div>`}).join('');
   return g+'</div></div>';
@@ -302,7 +314,7 @@ function monthView(){
   g+=`<div class="wk"><div class="mg">${['L','M','M','G','V','S','D'].map(x=>`<div class="dn">${x}</div>`).join('')}`;
   const weeks=Math.ceil(((first.getDay()+6)%7+new Date(first.getFullYear(),m+1,0).getDate())/7);
   for(let i=0;i<weeks*7;i++){const d=add(start,i),k=iso(d),E=evs(k);
-    g+=`<button class="cell ${d.getMonth()!==m?'out':''} ${k===T?'td':''} ${k===sel?'sel':''}" data-a="sel" data-v="${k}"><b>${d.getDate()}</b><span class="dots">${E.map(e=>`<i class="${e.k}"></i>`).join('')}</span></button>`}
+    g+=`<button class="cell ${d.getMonth()!==m?'out':''} ${k===T?'td':''} ${k===sel?'sel':''}" data-a="sel" data-v="${k}"><b>${d.getDate()}</b><span class="dots">${E.filter(e=>!e.off).map(e=>`<i class="${e.k}"></i>`).join('')}</span></button>`}
   g+='</div></div>';
   const E=evs(sel);
   g+=`<div class="mon">${fd(sel)}${sel===T?' · oggi':''}</div>`+(E.length?`<div class="card">${E.map(evBody).join('<div style="height:14px"></div>')}</div>`:'<div class="card empty">Niente in programma</div>');
@@ -357,7 +369,7 @@ function pizzaView(){
 V.team=()=>{
   const grp=(t,L)=>`<h2>${t}</h2><div class="list">${L.map(p=>`<button class="row" style="grid-template-columns:auto minmax(0,1fr) auto" data-a="player" data-v="${p.id}">${jersey(p,40)}<span class="who"><b>${esc(p.sopr)}</b><span>${esc(p.ruolo)}</span>${p.min.length?`<span style="display:block;margin-top:4px">${p.min.map(m=>`<span class="tag a">${esc(m)}</span>`).join('')}</span>`:''}</span><span class="eur num" style="font-size:22px">${p.num??''}</span></button>`).join('')}</div>`;
   const pl=S.people.filter(p=>!p.staff).sort((a,b)=>a.num-b.num);
-  return `<h1>Rosa</h1><p class="mute" style="margin-top:-6px">${S.people.length} componenti · maglia verde acqua per i liberi</p>${grp('Giocatori',pl)}${grp('Staff',S.people.filter(p=>p.staff))}`;
+  return `<h1>Rosa</h1><p class="mute" style="margin-top:-6px">${S.people.length} componenti · maglia verde acqua per i liberi</p>${can('rosa')?'<button class="btn a" style="margin-top:4px" data-a="person" data-v="">Aggiungi un componente</button>':''}${grp('Giocatori',pl)}${grp('Staff',S.people.filter(p=>p.staff))}`;
 };
 V.more=()=>{
   const me=ME(),ges=can('gestione');
@@ -368,7 +380,7 @@ V.more=()=>{
   ${me.admin||(me.min||[]).includes('Admin')?`<h2>Backup dei dati</h2><div class="card" style="display:grid;gap:8px"><button class="btn a" style="margin:0" data-a="bk" data-v="json">Scarica il backup completo</button><button class="btn ghost" style="margin:0" data-a="bk" data-v="csv">Scarica l'elenco X per Excel</button></div>`:''}
   ${notifSection()}
   ${ges&&S.code?`<h2>Codice squadra</h2><div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><b style="font-size:22px;letter-spacing:.06em">${esc(S.code)}</b><button class="btn sm ghost" data-a="copycode">Copia</button></div>`:''}
-  <h2>Permessi</h2><div class="card" style="padding:8px 12px;overflow-x:auto"><table class="ptab"><thead><tr><th>Chi</th><th>X e Jolly</th><th>Partite</th><th>Pizza</th><th>Gestione</th></tr></thead><tbody>${[...S.people].sort((a,b)=>(a.staff-b.staff)||a.cognome.localeCompare(b.cognome)).map(p=>`<tr><td>${esc(p.sopr)}${p.admin?' <span class="mute small">· admin</span>':p.staff?' <span class="mute small">· staff</span>':''}</td>${['x','partite','pizza','gestione'].map(k=>`<td><input type="checkbox" data-f="perm" data-p="${p.id}" data-k="${k}" aria-label="${k}" ${p.perms.includes(k)?'checked':''} ${ges&&!p.admin?'':'disabled'}></td>`).join('')}</tr>`).join('')}</tbody></table></div>
+  <h2>Permessi</h2><div class="card" style="padding:8px 12px;overflow-x:auto"><table class="ptab"><thead><tr><th>Chi</th><th>X e Jolly</th><th>Partite</th><th>Pizza</th><th>Rosa</th><th>Gestione</th></tr></thead><tbody>${[...S.people].sort((a,b)=>(a.staff-b.staff)||a.cognome.localeCompare(b.cognome)).map(p=>`<tr><td>${esc(p.sopr)}${p.admin?' <span class="mute small">· admin</span>':p.staff?' <span class="mute small">· staff</span>':''}</td>${['x','partite','pizza','rosa','gestione'].map(k=>`<td><input type="checkbox" data-f="perm" data-p="${p.id}" data-k="${k}" aria-label="${k}" ${p.perms.includes(k)?'checked':''} ${ges&&!p.admin?'':'disabled'}></td>`).join('')}</tr>`).join('')}</tbody></table></div>
   <h2>Categorie</h2><div class="list">${catGroups().map(([t,g])=>`<button class="set" style="width:100%;border:0;background:none;text-align:left" data-a="cats" data-v="${t+g}"><span><span class="badge ${t}" style="display:inline-grid;width:26px;height:26px;font-size:13px;margin-right:8px">${t}</span>${esc(g)}</span><span class="mute">${S.cats.filter(c=>c.t===t&&c.g===g).length} ›</span></button>`).join('')}</div>
   <h2>Stagione</h2><div class="list"><div class="set"><span>Valore di una X o Jolly</span><b>${S.valX} €</b></div><div class="set"><span>Quota esonero</span><b>${S.quota} €</b></div>${ini?`<div class="set"><span>Inizio X</span><b>${ini}</b></div>`:''}</div>
   <h2>Palestre</h2><div class="list">${S.gyms.map(g=>`<div class="set"><span><b>${esc(g.nome)}</b><br><span class="mute small">${esc(g.addr)}</span></span><a class="go" style="margin:0" href="${esc(mapsUrl(g.addr))}" target="_blank" rel="noopener" aria-label="Portami lì">${ic('pin')}</a></div>`).join('')}</div>
@@ -386,24 +398,37 @@ function playerSheet(id){
   <div class="tot"><div><b style="color:var(--xr)">${t.x}</b><span>X</span></div><div><b style="color:var(--acc)">${t.j}</b><span>Jolly</span></div><div><b class="num"${t.net<0&&p.stato!=='esonerato'?' style="color:var(--acc)"':''}>${p.stato==='esonerato'?eur(S.quota):eur(Math.abs(t.net))}</b><span>${p.stato==='esonerato'?'quota':t.net<0?'da ricevere':'da pagare'}</span></div></div>
   <h2 style="margin-top:8px">Parziali per mese</h2><div class="bars">${months.filter(m=>m.x||m.j||[8,9,10].includes(m.m)).map(m=>`<div class="bar"><span>${MM[m.m]}</span><span class="t"><i style="width:${m.x/mx*100}%"></i></span><span class="num" style="text-align:right">${eur((m.x-m.j)*S.valX)}</span></div>`).join('')}</div>
   <h2>Movimenti</h2><div class="list">${L.length?L.map(e=>`<button class="row mv" data-a="entry" data-v="${e.id}"><span class="badge ${e.t}">${e.t}</span><span class="who"><b>${esc(C(e.c).nome)}${e.q>1?' ×'+e.q:''}</b><span>${e.n?esc(e.n):'Assegnata da '+esc(P(e.by).sopr)}</span></span><span class="small mute num">${fd(e.d)}</span></button>`).join(''):'<div class="empty">Nessun movimento. Per ora.</div>'}</div>
-  ${can('gestione')&&!p.staff?`<label class="f" for="pst">Partecipazione alle X</label><select id="pst" class="inp" data-f="stato" data-p="${p.id}">${[['gioca','Partecipa'],['esonerato','Esonerato (quota '+S.quota+' €)'],['fuori','Non partecipa']].map(([k,l])=>`<option value="${k}" ${p.stato===k?'selected':''}>${l}</option>`).join('')}</select>`:''}
+  ${can('rosa')?`<button class="btn ghost" data-a="person" data-v="${p.id}">Modifica nome, numero o ruolo</button>`:''}
+  ${(can('gestione')||can('rosa'))&&!p.staff?`<label class="f" for="pst">Partecipazione alle X</label><select id="pst" class="inp" data-f="stato" data-p="${p.id}">${[['gioca','Partecipa'],['esonerato','Esonerato (quota '+S.quota+' €)'],['fuori','Non partecipa']].map(([k,l])=>`<option value="${k}" ${p.stato===k?'selected':''}>${l}</option>`).join('')}</select>`:''}
   ${can('gestione')&&!p.admin&&p.has_pin?`<button class="btn ghost" data-a="pinreset" data-v="${p.id}">Azzera il PIN (ha cambiato telefono o l'ha dimenticato)</button>`:''}
   ${can('gestione')&&!p.has_pin?'<p class="mute small">Non è ancora entrato nell\'app.</p>':''}
   ${can('x')&&p.stato!=='fuori'?`<button class="btn a" data-a="assign" data-v="${id}">Assegna X o Jolly a ${esc(p.sopr)}</button>`:''}`);
+}
+const RUOLI=['Palleggiatore','Opposto','Schiacciatore','Centrale','Libero','1° allenatore','2° allenatore','Preparatore','Dirigente'];
+const isStaffRole=r=>!['Palleggiatore','Opposto','Schiacciatore','Centrale','Libero'].includes(r);
+function personSheet(id){
+  const p=id?P(id):{nome:'',cognome:'',num:null,ruolo:'Schiacciatore'};
+  const storia=id&&(S.entries.some(e=>e.p===id||e.by===id)||S.pizza.due.some(z=>z.p===id)||S.pizza.hist.some(z=>z.p===id));
+  sheet(`<h1 style="font-size:26px;margin-top:8px">${id?'Modifica componente':'Nuovo componente'}</h1><form id="psf"><input type="hidden" id="psid" value="${esc(id||'')}">
+  <label class="f" for="psn">Nome</label><input id="psn" class="inp" required value="${esc(p.nome)}"><label class="f" for="psc">Cognome</label><input id="psc" class="inp" required value="${esc(p.cognome)}">
+  <div style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px"><div><label class="f" for="psu">Numero</label><input id="psu" type="number" min="0" max="99" class="inp" value="${p.num??''}"></div><div><label class="f" for="psr">Ruolo</label><select id="psr" class="inp">${RUOLI.map(r=>`<option ${r===p.ruolo?'selected':''}>${r}</option>`).join('')}</select></div></div>
+  ${id?'':'<label class="set" style="padding:14px 0 0"><span>X di benvenuto (solo giocatori)</span><input type="checkbox" class="sw" id="psb" checked></label>'}
+  <button class="btn a">${id?'Salva':'Aggiungi alla rosa'}</button>
+  ${id&&!p.admin&&id!==S.me?(storia?'<p class="mute small">Ha già X o pizze: per toglierlo dalle X imposta "Non partecipa".</p>':`<button type="button" class="btn ghost" data-a="pdel2" data-v="${id}">Elimina dalla rosa</button>`):''}</form>`);
 }
 function entrySheet(id){
   const e=S.entries.find(x=>x.id===id);if(!e)return close();const c=C(e.c);
   sheet(`<div style="display:flex;gap:12px;align-items:center;margin-top:6px"><span class="badge ${e.t}" style="width:48px;height:48px;font-size:22px">${e.t}</span><div><b style="font-size:20px">${e.t==='X'?'X':'Jolly'} a ${esc(P(e.p).sopr)}</b><div class="mute">${fd(e.d)}</div></div></div>
   <div class="list" style="margin-top:14px"><div class="set"><span>Motivo</span><b style="text-align:right">${esc(c.nome)}</b></div><div class="set"><span>Quantità</span><b>${units(e)} ${e.t==='X'?'X':'Jolly'} · ${eur(units(e)*S.valX)}</b></div><div class="set"><span>Assegnata da</span><b>${esc(P(e.by).sopr)}</b></div>${e.n?`<div class="set"><span>Nota</span><span style="text-align:right">${esc(e.n)}</span></div>`:''}</div>
-  ${can('x')?`<button class="btn ghost" data-a="del" data-v="${e.id}">Annulla questa ${e.t==='X'?'X':'Jolly'}</button>`:''}`);
+  ${can('x')?`<button class="btn a" data-a="eedit" data-v="${e.id}">Modifica</button><button class="btn ghost" data-a="del" data-v="${e.id}">Annulla questa ${e.t==='X'?'X':'Jolly'}</button>`:''}`);
 }
 function assignModes(){return [...(can('x')?[['X','X'],['J','Jolly']]:[]),...(can('pizza')?[['P','Pizza']]:[])]}
 function assignSheet(pre,mode){
   const modes=assignModes();if(!modes.length)return;
   if(!UI.form)UI.form={t:mode&&modes.some(m=>m[0]===mode)?mode:modes[0][0],p:pre?[pre]:[],c:'',q:1,d:T,n:'',mot:''};
-  const f=UI.form,pz=f.t==='P';
+  const f=UI.form,pz=f.t==='P',ed=!!f.edit;
   const pl=S.people.filter(p=>pz?!p.staff:p.stato!=='fuori');
-  const seg=modes.length>1?`<div class="seg">${modes.map(([k,l])=>`<button class="${f.t===k?'on':''}" data-a="ft" data-v="${k}">${l}</button>`).join('')}</div>`:'';
+  const seg=(ed?modes.filter(m=>m[0]!=='P'):modes).length>1?`<div class="seg">${(ed?modes.filter(m=>m[0]!=='P'):modes).map(([k,l])=>`<button class="${f.t===k?'on':''}" data-a="ft" data-v="${k}">${l}</button>`).join('')}</div>`:'';
   const chips=`<label class="f">${pz?'Chi paga':'A chi'}${f.p.length?' · '+f.p.length:''}</label><div class="chips">${pl.map(p=>`<button class="chip ${f.p.includes(p.id)?(f.t==='X'?'on':'onJ'):''}" data-a="fp" data-v="${p.id}">${esc(p.sopr)}</button>`).join('')}</div>`;
   if(pz){
     sheet(`<h1 style="font-size:26px;margin-top:8px">Assegna</h1>${seg}${chips}
@@ -413,13 +438,25 @@ function assignSheet(pre,mode){
     return;
   }
   const cats=S.cats.filter(c=>c.t===f.t),cat=S.cats.find(c=>c.id===f.c),groups=[...new Set(cats.map(c=>c.g))];
-  sheet(`<h1 style="font-size:26px;margin-top:8px">Assegna</h1>${seg}${chips}
-  <label class="f" for="fc">Motivo</label><select id="fc" class="inp" data-f="fc"><option value="">Scegli dal regolamento…</option>${groups.map(g=>`<optgroup label="${esc(g)}">${cats.filter(c=>c.g===g).map(c=>`<option value="${c.id}" ${c.id===f.c?'selected':''}>${esc(c.nome)}${c.u>1?' ('+c.u+' X)':''}</option>`).join('')}</optgroup>`).join('')}</select>
+  sheet(`<h1 style="font-size:26px;margin-top:8px">${ed?'Modifica':'Assegna'}</h1>${seg}${chips}
+  <label class="f" for="fc">Motivo</label><select id="fc" class="inp" data-f="fc"><option value="">Scegli dal regolamento…</option>${groups.map(g=>`<optgroup label="${esc(g)}">${cats.filter(c=>c.g===g).map(c=>`<option value="${c.id}" ${c.id===f.c?'selected':''}>${esc(c.nome)}${c.u>1?' ('+c.u+' X)':''}</option>`).join('')}</optgroup>`).join('')}<option value="__new" ${f.newcat?'selected':''}>${f.t==='X'?'+ Nuova X…':'+ Nuovo Jolly…'}</option></select>
+  ${f.newcat?`<div class="card" style="margin-top:8px"><label class="f" for="ncn" style="margin-top:0">${f.t==='X'?'Nuova X':'Nuovo Jolly'}: scrivi la dicitura</label><input id="ncn" class="inp" placeholder="${f.t==='X'?'Es. Pallonata al pubblico':'Es. Muro sul 24'}" autocomplete="off"><button type="button" class="btn a" style="margin-top:10px" data-a="catsave">Salva nell'elenco</button></div>`:''}
   ${cat&&cat.q?`<label class="f">${cat.nome.includes('kg')?'Chili dimostrati':cat.nome.includes('minuti')?'Blocchi da 3 minuti':'Quanti oggetti'}</label><div class="step"><button data-a="fq" data-v="-1" aria-label="Meno">−</button><b>${f.q}</b><button data-a="fq" data-v="1" aria-label="Più">+</button></div>`:''}
   <label class="f" for="fd">Data</label><input id="fd" type="date" class="inp" value="${f.d}" data-f="fd">
   <label class="f" for="fn">Nota (facoltativa)</label><input id="fn" class="inp" value="${esc(f.n)}" placeholder="Es. pallone lasciato sotto la panchina" data-f="fn">
   ${cat?`<div class="note">${f.p.length===1?"1 persona":(f.p.length||0)+" persone"} × ${cat.u*f.q} ${f.t==='X'?'X':'Jolly'} = ${eur((f.p.length||0)*cat.u*f.q*S.valX)}${f.t==='J'?' a favore':''}</div>`:''}
-  <button class="btn ${f.t==='J'?'a':''}" data-a="fsave" ${f.p.length&&f.c?'':'disabled style="opacity:.4"'}>Assegna e avvisa</button>`);
+  <button class="btn ${f.t==='J'?'a':''}" data-a="fsave" ${f.p.length&&f.c?'':'disabled style="opacity:.4"'}>${ed?'Salva la modifica':'Assegna e avvisa'}</button>`);
+}
+function trainingSheet(d){
+  const day=d||iso(add(TODAY,1)),ex=(S.training||{})[day],wd=parse(day).getDay(),base=TR[wd];
+  const st=ex?(ex.annullato?'no':'si'):'si',ini=(ex&&ex.ini)||(base?base[0]:'20:30'),fine=(ex&&ex.fine)||(base?base[1]:'22:30');
+  sheet(`<h1 style="font-size:26px;margin-top:8px">${d?'Allenamento':'Allenamento extra'}</h1><form id="tf">
+  <label class="f" for="td">Giorno</label><input id="td" type="date" class="inp" value="${day}" ${d?'readonly':''} required>
+  <label class="f">Si fa?</label><div class="seg" style="margin:0"><button type="button" class="${st==='si'?'on':''}" data-a="tst" data-v="si">Sì</button><button type="button" class="${st==='no'?'on':''}" data-a="tst" data-v="no">Annullato</button></div><input type="hidden" id="tst" value="${st}">
+  <div id="tor" ${st==='no'?'hidden':''} style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px"><div><label class="f" for="ti">Inizio</label><input id="ti" type="time" class="inp" value="${ini}"></div><div><label class="f" for="tfi">Fine</label><input id="tfi" type="time" class="inp" value="${fine}"></div></div>
+  <label class="f" for="tn">Nota (facoltativa)</label><input id="tn" class="inp" value="${esc((ex&&ex.nota)||'')}" placeholder="Es. palestra chiusa per le feste">
+  <button class="btn a">Salva e avvisa la squadra</button>
+  ${ex?`<button type="button" class="btn ghost" data-a="trdel" data-v="${day}">${base?'Torna all\'orario di sempre':'Elimina questo allenamento'}</button>`:''}</form>`);
 }
 function matchSheet(id){
   const m=S.matches.find(x=>x.id===id)||{id:'',avv:'',casa:true,gym:FIP.home,d:iso(add(TODAY,(6-TODAY.getDay()+7)%7||7)),ora:'21:00'};
@@ -457,7 +494,7 @@ function render(){
   const fab=$('#fab');
   if((UI.tab==='home'||UI.tab==='x')&&assignModes().length){fab.hidden=false;fab.innerHTML=ic('plus')+'Assegna';fab.dataset.a='assign';fab.dataset.v=''}
   else if(UI.tab==='cal'&&UI.cseg==='pz'&&can('pizza')){fab.hidden=false;fab.innerHTML=ic('plus')+'Pizza';fab.dataset.a='assign';fab.dataset.v='|P'}
-  else if(UI.tab==='cal'&&UI.cseg==='ag'&&can('partite')){fab.hidden=false;fab.innerHTML=ic('plus')+'Partita';fab.dataset.a='match';fab.dataset.v=''}
+  else if(UI.tab==='cal'&&UI.cseg==='ag'&&can('partite')){fab.hidden=false;fab.innerHTML=ic('plus')+'Aggiungi';fab.dataset.a='evnew';fab.dataset.v=''}
   else fab.hidden=true;
 }
 const A={
@@ -466,7 +503,7 @@ const A={
   player:v=>playerSheet(v),entry:v=>entrySheet(v),close:()=>close(),
   assign:v=>{const [p,m]=(v||'').split('|');UI.form=null;assignSheet(p||null,m||null)},
   ft:v=>{const f=UI.form;f.t=v;f.c='';f.q=1;f.mot='';if(v==='P')f.p=f.p.filter(id=>!P(id).staff);else f.p=f.p.filter(id=>P(id).stato!=='fuori');assignSheet()},
-  fp:v=>{const a=UI.form.p;a.includes(v)?a.splice(a.indexOf(v),1):a.push(v);assignSheet()},
+  fp:v=>{const f=UI.form,a=f.p;if(f.edit){f.p=[v]}else{a.includes(v)?a.splice(a.indexOf(v),1):a.push(v)}assignSheet()},
   fq:v=>{UI.form.q=Math.max(1,UI.form.q+Number(v));assignSheet()},
   fsave:async()=>{const f=UI.form;if(!f.p.length)return;
     if(f.t==='P'){
@@ -475,11 +512,22 @@ const A={
       if(ok){const names=f.p.slice(0,ok).map(id=>P(id).sopr).join(', ');close();toast('Fatto',` ${names}: pizza (${f.mot})`)}
       return;
     }
-    if(!f.c)return;
+    if(!f.c||f.c==='__new')return;
+    if(f.edit){if(await act('entry_edit',{id:f.edit,p:f.p[0],c:f.c,q:f.q,d:f.d,n:f.n.trim()})){close();toast('Fatto',' Modifica salvata.')}return}
     const r=await act('entries_add',{t:f.t,p:f.p,c:f.c,q:f.q,d:f.d,n:f.n.trim()});
     if(r){const names=f.p.map(id=>P(id).sopr).join(', '),cn=C(f.c).nome;close();toast('Fatto',` ${names}: ${f.t==='X'?'nuova X':'nuovo Jolly'} · ${cn}`)}},
+  eedit:v=>{const e=S.entries.find(x=>x.id===v);if(!e)return;UI.form={edit:e.id,t:e.t,p:[e.p],c:e.c,q:e.q,d:e.d,n:e.n||'',mot:''};assignSheet()},
+  catsave:async()=>{const f=UI.form,nome=($('#ncn')||{}).value?.trim();if(!nome)return toast('Manca la dicitura',' Scrivi il nome della nuova voce.');
+    const r=await act('cat_add',{t:f.t,nome});if(r&&r.id){f.c=r.id;f.newcat=false;f.q=1;assignSheet();toast('Salvata',' “'+nome+'” ora è nell\'elenco.')}},
+  person:v=>personSheet(v||null),
+  pdel2:v=>{const b=document.querySelector('[data-a=pdel2]');if(b&&!b.dataset.ok){b.dataset.ok='1';b.textContent='Tocca di nuovo per confermare';return}
+    act('person_del',{p:v},['Fatto',' Componente eliminato.']).then(r=>r&&close())},
+  tr:v=>trainingSheet(v),
+  evnew:()=>sheet(`<h1 style="font-size:26px;margin-top:8px">Aggiungi</h1><button class="btn a" data-a="match" data-v="">Partita o amichevole</button><button class="btn ghost" data-a="tr" data-v="">Allenamento extra</button>`),
+  trdel:v=>act('training_del',{d:v},['Fatto',' Torna l\'orario di sempre.']).then(r=>r&&close()),
   del:v=>act('entry_del',{id:v}).then(r=>r&&close()),
   match:v=>matchSheet(v),
+  tst:v=>{$('#tst').value=v;document.querySelectorAll('[data-a=tst]').forEach(b=>b.classList.toggle('on',b.dataset.v===v));$('#tor').hidden=v==='no'},
   mcasa:v=>{$('#mc').value=v;document.querySelectorAll('[data-a=mcasa]').forEach(b=>b.classList.toggle('on',b.dataset.v===v));const g=$('#mg');if(v==='1')g.value=FIP.home},
   mdel:v=>act('match_del',{id:v}).then(r=>r&&close()),
   pskip:v=>act('pizza_skip',{d:v}),
@@ -530,7 +578,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target,k=t.dataset.f;
-  if(k==='fc'){UI.form.c=t.value;UI.form.q=1;assignSheet()}
+  if(k==='fc'){if(t.value==='__new'){UI.form.newcat=true;UI.form.c=''}else{UI.form.c=t.value;UI.form.newcat=false}UI.form.q=1;assignSheet()}
   else if(k==='fd')UI.form.d=t.value;
   else if(k==='fm'){UI.form.mot=t.value;assignSheet()}
   else if(k==='stato'){const id=t.dataset.p;act('stato_set',{p:id,stato:t.value}).then(()=>playerSheet(id))}
@@ -553,6 +601,11 @@ document.addEventListener('submit',async e=>{
     const nuova=!x.id;
     if(await act('match_save',x)){close();if(nuova)toast('Partita inserita',` ${x.avv}, ${fd(x.d)} ore ${x.ora}`)}
   }
+  else if(id==='tf'){const no=$('#tst').value==='no';
+    if(await act('training_set',{d:$('#td').value,annullato:no,ini:no?null:$('#ti').value,fine:no?null:$('#tfi').value,nota:$('#tn').value.trim()})){close();toast('Fatto',no?' Allenamento annullato: la squadra viene avvisata.':' Orario salvato: la squadra viene avvisata.')}}
+  else if(id==='psf'){const id=$('#psid').value,r=$('#psr').value,x={nome:$('#psn').value,cognome:$('#psc').value,num:$('#psu').value,ruolo:r};
+    if(id){if(await act('person_edit',{...x,p:id})){close();toast('Fatto',' Dati aggiornati.')}}
+    else{const res=await act('person_add',{...x,staff:isStaffRole(r),benvenuto:!!($('#psb')||{}).checked});if(res){close();toast('Benvenuto!',` ${x.nome} ${x.cognome} è in rosa.`+(!isStaffRole(r)&&$('#psb')?.checked!==false?' Ha già la sua X di benvenuto.':''))}}}
   else if(id==='ef'){if(await act('profile',{nome:$('#en').value,cognome:$('#ec').value,sopr:$('#es').value,num:$('#eu').value,ruolo:$('#er').value}))close()}
 });
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();DEFERRED=e;render()});

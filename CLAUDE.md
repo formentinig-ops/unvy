@@ -27,7 +27,8 @@ template string: **ogni valore che viene dai dati passa da `esc()`**.
 ## Sicurezza (non indebolirla)
 - Tutte le tabelle hanno RLS attiva e **nessuna policy**: la chiave publishable non legge né scrive tabelle.
 - Il client usa solo 4 RPC: `login_people(code)`, `login(code,pid,pin)`, `get_state(tok)`, `act(tok,a,x)`.
-  `act` controlla la sessione e i permessi (`x`, `partite`, `pizza`, `gestione`; `admin` = tutti e intoccabile).
+  `act` controlla la sessione e i permessi (`x`, `partite`, `pizza`, `rosa`, `gestione`; `admin` = tutti e intoccabile).
+  `rosa` = aggiungere/modificare/eliminare componenti (eliminare solo se non hanno X né pizze); un nuovo giocatore riceve la X di benvenuto.
 - PIN: bcrypt (`crypt`), blocco 15 minuti dopo 5 errori. Primo accesso = il PIN lo sceglie l'utente.
 - Funzioni `push_queue`, `push_done`, `push_fip`, `push_reminders` eseguibili **solo da service_role**.
 - Il **regolamento PDF** sta nella tabella `docs` (id `regolamento`) e si legge con `get_doc(tok, did)`: contiene nomi, quindi **mai** nel repository.
@@ -80,6 +81,9 @@ cd supabase/functions/push && curl -s -X POST "https://api.supabase.com/v1/proje
 ## Scelte di interfaccia già decise (non cambiarle senza chiedere)
 - Scheda X: Classifica, Movimenti, Statistiche (motivi che portano più cassa, chi prende più X ogni mese); in fondo riepilogo "chi deve quanto" e link al regolamento.
 - Impostazioni: sotto il profilo, solo per l'Admin, backup completo (.json) ed elenco X per Excel (.csv).
+- Assegna → menù motivi: in fondo "+ Nuova X…" / "+ Nuovo Jolly…" (azione `cat_add`, gruppo "Altre X"). Una X si corregge dalla sua scheda ("Modifica", azione `entry_edit`).
+- Allenamenti: eccezioni in `training_ex` (annullato / orario diverso / extra), gestite da chi ha `partite`; se il martedì è annullato la pizza scala.
+- Home: box "Le tue X" prima della Classifica X.
 - Funzioni scartate dall'Admin (non riproporle): registro delle modifiche, pizza automatica per i compleanni, disponibilità alle partite, assegnazione rapida in allenamento.
 - Colori: nero, bianco, verde acqua (liberi) come accento; rosso solo per le X. Font Archivo.
 - Intestazione: logo a sinistra, maglia del giocatore al centro (apre la Rosa), "Serie C / 26/27" a destra.

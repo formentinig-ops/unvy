@@ -112,6 +112,14 @@ create table if not exists push_outbox (
   picked_at timestamptz,
   created_at timestamptz not null default now()
 );
+-- eccezioni agli allenamenti: annullati, orario diverso, allenamenti extra
+create table if not exists training_ex (
+  d date primary key,
+  annullato boolean not null default false,
+  ini text,
+  fine text,
+  nota text not null default ''
+);
 create table if not exists docs (
   id text primary key,
   nome text not null,
@@ -123,7 +131,7 @@ create table if not exists fip_snap (id int primary key default 1 check (id = 1)
 create table if not exists sent_marks (k text primary key, at timestamptz not null default now());
 
 do $$ declare t text; begin
-  foreach t in array array['team','people','cats','entries','gyms','matches','pizza_due','pizza_hist','pizza_skip','sessions','push_subs','push_outbox','fip_snap','sent_marks','docs'] loop
+  foreach t in array array['team','people','cats','entries','gyms','matches','pizza_due','pizza_hist','pizza_skip','sessions','push_subs','push_outbox','fip_snap','sent_marks','docs','training_ex'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on public.%I from anon, authenticated', t);
   end loop;
@@ -187,7 +195,7 @@ begin
     'people', (select jsonb_agg(jsonb_build_object(
         'id', id, 'nome', nome, 'cognome', cognome, 'sopr', case when sopr = '' then nome || ' ' || cognome else sopr end,
         'num', num, 'ruolo', ruolo, 'staff', staff, 'stato', stato, 'min', to_jsonb(min),
-        'perms', case when admin then '["x","partite","pizza","gestione"]'::jsonb else to_jsonb(perms) end,
+        'perms', case when admin then '["x","partite","pizza","rosa","gestione"]'::jsonb else to_jsonb(perms) end,
         'admin', admin, 'foto', foto, 'has_pin', pin_hash is not null) order by staff, cognome) from people),
     'cats', coalesce((select jsonb_agg(jsonb_build_object('id', id, 't', t, 'g', g, 'nome', nome, 'u', u, 'q', q) order by t desc, ord)
         from cats where attiva), '[]'::jsonb),
@@ -195,6 +203,7 @@ begin
         order by d desc, created_at desc) from entries), '[]'::jsonb),
     'gyms', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'nome', nome, 'addr', addr)) from gyms), '[]'::jsonb),
     'matches', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'avv', avv, 'casa', casa, 'gym', gym, 'd', d, 'ora', ora)) from matches), '[]'::jsonb),
+    'training', coalesce((select jsonb_object_agg(d::text, jsonb_build_object('annullato', annullato, 'ini', ini, 'fine', fine, 'nota', nota)) from training_ex), '{}'::jsonb),
     'push', coalesce((select jsonb_agg(jsonb_build_object('endpoint', endpoint, 'prefs', prefs)) from push_subs where p = me.id), '[]'::jsonb),
     'pizza', jsonb_build_object(
       'due', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'p', p, 'mot', mot) order by ord) from pizza_due), '[]'::jsonb),
@@ -238,6 +247,12 @@ returns text language sql immutable as $$
          extract(day from d)::int || '/' || extract(month from d)::int || ' ore ' || ora;
 $$;
 
+create or replace function public._mday(d date)
+returns text language sql immutable as $$
+  select (array['dom','lun','mar','mer','gio','ven','sab'])[extract(dow from d)::int + 1] || ' ' ||
+         extract(day from d)::int || '/' || extract(month from d)::int;
+$$;
+
 create or replace function public._gymname(gid text)
 returns text language sql stable security definer set search_path = public as $$
   select coalesce(
@@ -251,8 +266,8 @@ create or replace function public.act(tok uuid, a text, x jsonb default '{}'::js
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare
   me people; tgt people; e entries;
-  can_x boolean; can_par boolean; can_pz boolean; can_ges boolean;
-  stt text; pid text; gid text; r record;
+  can_x boolean; can_par boolean; can_pz boolean; can_ges boolean; can_rosa boolean;
+  stt text; pid text; gid text; r record; nid text;
 begin
   select p.* into me from sessions s join people p on p.id = s.p where s.token = tok;
   if me.id is null then raise exception 'SESSIONE'; end if;
@@ -260,6 +275,7 @@ begin
   can_par := me.admin or 'partite' = any(me.perms);
   can_pz  := me.admin or 'pizza' = any(me.perms);
   can_ges := me.admin or 'gestione' = any(me.perms);
+  can_rosa := me.admin or 'rosa' = any(me.perms);
 
   if a = 'entries_add' then
     if not exists (select 1 from cats where id = x->>'c' and t = x->>'t' and attiva) then raise exception 'DATI'; end if;
@@ -306,7 +322,7 @@ begin
 
   elsif a = 'perm_set' then
     if not can_ges then raise exception 'PERMESSO'; end if;
-    if x->>'k' not in ('x', 'partite', 'pizza', 'gestione') then raise exception 'DATI'; end if;
+    if x->>'k' not in ('x', 'partite', 'pizza', 'rosa', 'gestione') then raise exception 'DATI'; end if;
     select * into tgt from people where id = x->>'p';
     if tgt.id is null then raise exception 'DATI'; end if;
     if tgt.admin then raise exception 'ADMIN'; end if;
@@ -316,8 +332,84 @@ begin
     where id = tgt.id;
 
   elsif a = 'stato_set' then
-    if not can_ges then raise exception 'PERMESSO'; end if;
+    if not (can_ges or can_rosa) then raise exception 'PERMESSO'; end if;
     update people set stato = x->>'stato' where id = x->>'p';
+
+  -- rosa
+  elsif a = 'person_add' then
+    if not can_rosa then raise exception 'PERMESSO'; end if;
+    if coalesce(trim(x->>'nome'), '') = '' or coalesce(trim(x->>'cognome'), '') = '' then raise exception 'DATI'; end if;
+    nid := 'p' || substr(md5(random()::text), 1, 8);
+    insert into people(id, nome, cognome, num, ruolo, staff, stato)
+    values (nid, left(trim(x->>'nome'), 40), left(trim(x->>'cognome'), 40), nullif(x->>'num', '')::int,
+            coalesce(nullif(x->>'ruolo', ''), ''), coalesce((x->>'staff')::boolean, false),
+            case when coalesce((x->>'staff')::boolean, false) then 'fuori' else 'gioca' end);
+    if not coalesce((x->>'staff')::boolean, false) and coalesce((x->>'benvenuto')::boolean, true) then
+      insert into entries(t, p, c, q, d, n, da, st)
+      select 'X', nid, c.id, 1, current_date, 'Benvenuto in squadra!', me.id, 'ok' from cats c where c.nome ilike 'X di benvenuto%' limit 1;
+    end if;
+    return jsonb_build_object('id', nid);
+
+  elsif a = 'person_edit' then
+    if not can_rosa then raise exception 'PERMESSO'; end if;
+    update people set
+      nome = coalesce(nullif(trim(x->>'nome'), ''), nome),
+      cognome = coalesce(nullif(trim(x->>'cognome'), ''), cognome),
+      num = case when x ? 'num' then nullif(x->>'num', '')::int else num end,
+      ruolo = coalesce(nullif(x->>'ruolo', ''), ruolo)
+    where id = x->>'p';
+
+  elsif a = 'person_del' then
+    if not can_rosa then raise exception 'PERMESSO'; end if;
+    select * into tgt from people where id = x->>'p';
+    if tgt.id is null or tgt.admin or tgt.id = me.id then raise exception 'DATI'; end if;
+    if exists (select 1 from entries where p = tgt.id or da = tgt.id)
+       or exists (select 1 from pizza_due where p = tgt.id) or exists (select 1 from pizza_hist where p = tgt.id) then
+      raise exception 'STORIA';
+    end if;
+    delete from people where id = tgt.id;
+
+  -- nuove voci di X o Jolly (da "Assegna")
+  elsif a = 'cat_add' then
+    if not can_x then raise exception 'PERMESSO'; end if;
+    if coalesce(trim(x->>'nome'), '') = '' or x->>'t' not in ('X', 'J') then raise exception 'DATI'; end if;
+    select id into nid from cats where t = x->>'t' and lower(nome) = lower(trim(x->>'nome')) limit 1;
+    if nid is not null then
+      update cats set attiva = true where id = nid;
+      return jsonb_build_object('id', nid);
+    end if;
+    nid := x->>'t' || 'Nu' || substr(md5(random()::text), 1, 6);
+    insert into cats(id, t, g, nome, u, q, ord)
+    values (nid, x->>'t', case when x->>'t' = 'X' then 'Altre X' else 'Jolly' end, left(trim(x->>'nome'), 80),
+            greatest(1, least(5, coalesce((x->>'u')::int, 1))), false, (select coalesce(max(ord), 0) + 1 from cats));
+    return jsonb_build_object('id', nid);
+
+  -- correggere una X o un Jolly
+  elsif a = 'entry_edit' then
+    if not can_x then raise exception 'PERMESSO'; end if;
+    if not exists (select 1 from cats where id = x->>'c') or not exists (select 1 from people where id = x->>'p') then raise exception 'DATI'; end if;
+    update entries set p = x->>'p', c = x->>'c', t = (select t from cats where id = x->>'c'),
+      q = greatest(1, least(200, coalesce((x->>'q')::int, 1))), d = coalesce((x->>'d')::date, d), n = left(coalesce(x->>'n', ''), 300)
+    where id = (x->>'id')::uuid;
+
+  -- eccezioni agli allenamenti
+  elsif a = 'training_set' then
+    if not can_par then raise exception 'PERMESSO'; end if;
+    insert into training_ex(d, annullato, ini, fine, nota)
+    values ((x->>'d')::date, coalesce((x->>'annullato')::boolean, false), left(x->>'ini', 5), left(x->>'fine', 5), left(coalesce(x->>'nota', ''), 120))
+    on conflict (d) do update set annullato = excluded.annullato, ini = excluded.ini, fine = excluded.fine, nota = excluded.nota;
+    perform _enqueue('cambi', null,
+      case when coalesce((x->>'annullato')::boolean, false) then 'Allenamento annullato' else 'Allenamento: orario aggiornato' end,
+      case when coalesce((x->>'annullato')::boolean, false) then _mday((x->>'d')::date)
+           else _mwhen((x->>'d')::date, coalesce(x->>'ini', '')) || ' – ' || coalesce(x->>'fine', '') end ||
+      case when coalesce(x->>'nota', '') <> '' then ' · ' || (x->>'nota') else '' end);
+
+  elsif a = 'training_del' then
+    if not can_par then raise exception 'PERMESSO'; end if;
+    delete from training_ex where d = (x->>'d')::date;
+    if found then
+      perform _enqueue('cambi', null, 'Allenamento: orario normale', _mday((x->>'d')::date) || ': si torna all''orario di sempre');
+    end if;
 
   elsif a = 'pin_reset' then
     if not can_ges then raise exception 'PERMESSO'; end if;
@@ -508,7 +600,8 @@ begin
       perform _enqueue('prom', null, 'Domani si gioca', _mtitle(m.avv, m.casa) || ' · ore ' || m.ora || coalesce(' · ' || _gymname(m.gym), '')); n := n + 1;
     end if;
   end loop;
-  if extract(isodow from tom) = 2 and not exists (select 1 from pizza_skip where pizza_skip.d = tom) then
+  if extract(isodow from tom) = 2 and not exists (select 1 from pizza_skip where pizza_skip.d = tom)
+     and not exists (select 1 from training_ex where training_ex.d = tom and annullato) then
     select pd.p, pd.mot, pe.nome || ' ' || pe.cognome as chi into dz
     from pizza_due pd join people pe on pe.id = pd.p order by pd.ord limit 1;
     if dz.p is not null and _mark('pizza:' || tom) then
