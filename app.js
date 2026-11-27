@@ -237,9 +237,9 @@ function statsView(){
   if(!X.length)return '<div class="empty">Ancora nessuna X</div>';
   const byCat={};X.forEach(e=>{const v=byCat[e.c]||(byCat[e.c]={n:0,u:0});v.n+=e.q;v.u+=units(e)});
   const cats=Object.entries(byCat).sort((a,b)=>b[1].u-a[1].u||b[1].n-a[1].n),mx=Math.max(...cats.map(c=>c[1].u));
-  let h=`<h2 style="margin-top:6px">Cosa porta più soldi in cassa</h2><div class="card">${cats.slice(0,10).map(([c,v],i)=>`<div class="srank"><div class="srow2"><span>${i+1}. ${esc(C(c).nome)}</span><b class="num">${eur(v.u*S.valX)}</b></div><div class="t"><i style="width:${v.u/mx*100}%"></i></div><div class="small mute">${v.n===1?'1 volta':v.n+' volte'}</div></div>`).join('')}</div>`;
+  let h=`<div class="card">${cats.slice(0,10).map(([c,v],i)=>`<div class="srank"><div class="srow2"><span>${i+1}. ${esc(C(c).nome)}</span><b class="num">${eur(v.u*S.valX)}</b></div><div class="t"><i style="width:${v.u/mx*100}%"></i></div><div class="small mute">${v.n===1?'1 volta':v.n+' volte'}</div></div>`).join('')}</div>`;
   const months={};X.forEach(e=>{const m=e.d.slice(0,7);const o=months[m]||(months[m]={});o[e.p]=(o[e.p]||0)+units(e)});
-  h+=`<h2>Chi prende più X ogni mese</h2><div class="list">${Object.keys(months).sort().reverse().map(m=>{
+  h+=`<div class="list" style="margin-top:18px">${Object.keys(months).sort().reverse().map(m=>{
     const arr=Object.entries(months[m]).sort((a,b)=>b[1]-a[1]),top=arr[0][1],kings=arr.filter(a=>a[1]===top).map(a=>P(a[0])),tot=arr.reduce((t,a)=>t+a[1],0),d=parse(m+'-01');
     return `<button class="qrow" style="grid-template-columns:auto minmax(0,1fr) auto;width:100%;border:0;background:none;text-align:left" data-a="player" data-v="${kings[0].id}">${jersey(kings[0],34)}<div><b>${MF[d.getMonth()]} ${d.getFullYear()}</b><div class="small mute">${esc(kings.map(k=>k.sopr).join(', '))} · ${top} X</div></div><span class="small mute num">${tot} X in tutto</span></button>`}).join('')}</div>`;
   return h;
