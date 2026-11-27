@@ -246,7 +246,8 @@ function statsView(){
 }
 function riepilogoText(){
   const r=rank();
-  const lines=r.map(t=>`${t.p.sopr}: ${t.p.stato==='esonerato'?'quota '+eur(S.quota):t.net<0?'riceve '+eur(-t.net):eur(t.net)}`);
+  const det=t=>` (${t.x} X${t.j?`, ${t.j} Jolly`:''})`;
+  const lines=r.map(t=>`${t.p.sopr}: ${t.p.stato==='esonerato'?'quota '+eur(S.quota):t.net<0?'riceve '+eur(-t.net):eur(t.net)}${det(t)}`);
   return `Riepilogo X · Serie C 26/27 (al ${fd(T)})\n\n${lines.join('\n')}\n\nTotale cassa: ${eur(cassa().tot)}`;
 }
 function xFooter(){
