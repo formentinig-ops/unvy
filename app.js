@@ -246,7 +246,7 @@ function summaryRows(){
   let tE=evs(T),day=T;
   let r1;
   if(tE.length)r1=`<button class="srow" data-a="ev" data-v="${T}|${tE[0].k}"><span class="sk">Oggi</span><span class="sv">${esc(tE.map(desc).join(' · '))}</span><span class="mute">›</span></button>`;
-  else{for(let i=1;i<14&&!evs(day=iso(add(TODAY,i))).length;i++);const e=evs(day)[0];r1=`<button class="srow" data-a="ev" data-v="${day}|${e?e.k:''}"><span class="sk">Oggi</span><span class="sv">Riposo<span class="mute"> · poi ${esc(fd(day))}: ${esc(e?desc(e):'—')}</span></span><span class="mute">›</span></button>`}
+  else{for(let i=1;i<14&&!evs(day=iso(add(TODAY,i))).length;i++);const e=evs(day)[0];r1=`<button class="srow" data-a="ev" data-v="${day}|${e?e.k:''}"><span class="sk">Oggi</span><span class="sv">${TODAY.getDay()===3?'San Mercoledì':'Riposo'}<span class="mute"> · poi ${esc(fd(day))}: ${esc(e?desc(e):'—')}</span></span><span class="mute">›</span></button>`}
   const nm=S.matches.filter(m=>m.d>=T).sort((a,b)=>(a.d+a.ora).localeCompare(b.d+b.ora))[0];
   const lbl='Prossima';
   const r2=nm?`<button class="srow" data-a="ev" data-v="${nm.d}|m"><span class="sk" style="background:var(--ink);color:var(--bg)">${lbl}</span><span class="sv"><b>${esc(mTitle(nm))}</b><span class="mute"> · ${esc(fd(nm.d))} ${esc(nm.ora)} · ${nm.casa?'casa':'trasferta'}</span></span><span class="mute">›</span></button>`:'';
