@@ -17,7 +17,7 @@ stampare nulla: `git grep -nE "UNVY-[A-Z0-9]{5}|\"d\":\"[A-Za-z0-9_-]{40,}\"" | 
 | App (PWA) | `index.html`, `styles.css`, `app.js`, `config.js`, `sw.js`, `manifest.webmanifest`, `icons/` | servita da GitHub Pages: https://formentinig-ops.github.io/unvy/ (deploy automatico da `main`, 1–2 min) |
 | Database | Supabase, progetto `cpkfuumzklekimmqccnn` (eu-west-1) | schema in `supabase/schema.sql` |
 | Notifiche push | Edge Function `supabase/functions/push/` (`index.ts` + `webpush.js`, WebCrypto puro) | `verify_jwt: false`; segreti `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_JWK`, `VAPID_SUBJECT` |
-| Controllo ogni 10 min | `supabase/cron.sql` (pg_cron + pg_net → funzione `push` con `{"mode":"tick"}`) | FIPAV diff + promemoria serali + invio coda |
+| Controllo ogni 10 min | `supabase/cron.sql` (pg_cron + pg_net → funzione `push` con `{"mode":"tick"}`) | FIPAV diff + promemoria della sera prima (dalle 18) + promemoria 3 ore prima della partita + invio coda |
 | Dati FIPAV | `data/fipav.json`, generato da `scripts/fipav_sync.py` | workflow `.github/workflows/fipav.yml`: ogni ora, ogni 15 min nei giorni di gara |
 
 App senza framework: `app.js` è un unico blocco `{ … }` con stato `S` (da `get_state`), viste `V.*`,

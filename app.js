@@ -93,7 +93,7 @@ function rtConnect(){
 function rtClose(){if(WS){const w=WS;WS=null;try{w.close()}catch(e){}}}
 const rtPing=()=>rtSend('broadcast',{type:'broadcast',event:'changed',payload:{}});
 /* ---- notifiche push ---- */
-const PUSH_KINDS=[['x','Nuova X o Jolly ricevuta'],['partita','Nuova partita inserita'],['cambi','Partita spostata (orario o palestra)'],['prom','Promemoria il giorno prima della partita'],['ris','Risultato della nostra partita'],['risAll','Risultati delle altre squadre (uno per partita)'],['pizza','Promemoria pizza (lunedì sera)']];
+const PUSH_KINDS=[['x','Nuova X o Jolly ricevuta'],['partita','Nuova partita inserita'],['cambi','Partita spostata (orario o palestra)'],['prom','Promemoria il giorno prima della partita'],['pre','Promemoria 3 ore prima della partita'],['ris','Risultato della nostra partita'],['risAll','Risultati delle altre squadre (uno per partita)'],['pizza','Promemoria pizza (lunedì sera)']];
 const pushOK=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
 const PUSH={endpoint:null};
 const u8=s=>{const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4));return Uint8Array.from(b,c=>c.charCodeAt(0))};

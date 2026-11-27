@@ -460,7 +460,27 @@ create or replace function public.push_reminders(at_time timestamptz default now
 returns int language plpgsql security definer set search_path = public as $$
 declare loc timestamp := at_time at time zone 'Europe/Rome'; tom date; g jsonb; m matches; dz record; n int := 0;
 begin
-  if extract(hour from loc) < 18 or extract(hour from loc) >= 23 then return 0; end if;
+  -- il giorno della partita, 3 ore prima dell'inizio (finestra di 30 minuti, una volta sola)
+  for g in select x from fip_snap, jsonb_array_elements(data->'gare') x
+           where fip_snap.id = 1 and (x->>'d')::date = loc::date and coalesce(x->>'ris', '') = '' loop
+    if loc >= ((g->>'d')::date + (g->>'ora')::time) - interval '3 hours'
+       and loc < ((g->>'d')::date + (g->>'ora')::time) - interval '2 hours 30 minutes'
+       and _mark('pre:' || (g->>'id') || ':' || loc::date) then
+      perform _enqueue('pre', null, 'Tra 3 ore si gioca 🏐',
+        _mtitle(g->>'avv', (g->>'casa')::boolean) || ' · ore ' || (g->>'ora') || coalesce(' · ' || _gymname(g->>'gym'), '') ||
+        '. Inizia a prepararti!'); n := n + 1;
+    end if;
+  end loop;
+  for m in select * from matches where matches.d = loc::date loop
+    if loc >= (m.d + m.ora::time) - interval '3 hours' and loc < (m.d + m.ora::time) - interval '2 hours 30 minutes'
+       and _mark('pre:' || m.id || ':' || m.d) then
+      perform _enqueue('pre', null, 'Tra 3 ore si gioca 🏐',
+        _mtitle(m.avv, m.casa) || ' · ore ' || m.ora || coalesce(' · ' || _gymname(m.gym), '') || '. Inizia a prepararti!'); n := n + 1;
+    end if;
+  end loop;
+
+  -- la sera prima: promemoria partite di domani e pizza
+  if extract(hour from loc) < 18 or extract(hour from loc) >= 23 then return n; end if;
   tom := loc::date + 1;
   for g in select x from fip_snap, jsonb_array_elements(data->'gare') x where fip_snap.id = 1 and (x->>'d')::date = tom loop
     if _mark('prom:' || (g->>'id') || ':' || tom) then
