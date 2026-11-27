@@ -22,6 +22,7 @@ team:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7
 more:'<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
 camp:'<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8 20h8M9.5 17h5"/>',
 set:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+doc:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
 pin:'<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
 plus:'<path d="M12 5v14M5 12h14" stroke-width="2.6"/>',
 bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'};
@@ -217,8 +218,8 @@ V.home=()=>{
   ${z?`<button class="card ev" style="width:100%;text-align:left" data-a="pztab">${whenBox(z.d)}<div><span class="tag x">${esc(z.why)}</span><div class="evt">Paga ${esc(P(z.p).sopr)}</div><div class="mute small">75 € · 5 mezzi metri</div></div></button>`:'<div class="card empty">Nessuno deve la pizza. Per ora.</div>'}`;
 };
 V.x=()=>{
-  if(UI.xseg!=='mv')UI.xseg='cl';
-  let h=`<h1>X e Jolly</h1><div class="seg">${[['cl','Classifica'],['mv','Movimenti']].map(([k,l])=>`<button class="${UI.xseg===k?'on':''}" data-a="xseg" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if(!['mv','st'].includes(UI.xseg))UI.xseg='cl';
+  let h=`<h1>X e Jolly</h1><div class="seg">${[['cl','Classifica'],['mv','Movimenti'],['st','Statistiche']].map(([k,l])=>`<button class="${UI.xseg===k?'on':''}" data-a="xseg" data-v="${k}">${l}</button>`).join('')}</div>`;
   if(UI.xseg==='cl'){
     h+=`<div class="list">${rank().map((t,i)=>`<button class="row" data-a="player" data-v="${t.p.id}"><span class="rk">${i+1}</span>${jersey(t.p,36)}<span class="who"><b>${esc(t.p.sopr)}</b><span>${esc(t.p.ruolo)}</span><span class="cnt"><span class="xx">${t.x} X</span>${t.j?`<span class="jj">${t.j} Jolly</span>`:''}</span></span><span class="eur num"${t.net<0?' style="color:var(--acc)"':''}>${t.net<0?'+'+eur(-t.net):eur(t.net)}${t.p.stato==='esonerato'?'<small>esonerato</small>':t.net<0?'<small>da ricevere</small>':''}</span></button>`).join('')}</div>`;
   }else if(UI.xseg==='mv'){
@@ -228,9 +229,34 @@ V.x=()=>{
     L.slice(0,80).forEach(e=>{const m=e.d.slice(0,7);if(m!==cur){if(open)h+='</div>';cur=m;const d=parse(e.d);h+=`<div class="mon">${MF[d.getMonth()]} ${d.getFullYear()}</div><div class="list">`;open=true}
       h+=`<button class="row mv" data-a="entry" data-v="${e.id}"><span class="badge ${e.t}">${e.t==='X'?'X':'J'}</span><span class="who"><b>${esc(P(e.p).sopr)}${e.q>1?' ×'+e.q:''}</b><span>${esc(C(e.c).nome)}</span></span><span class="small mute num">${fd(e.d)}</span></button>`});
     if(open)h+='</div>';if(!L.length)h+='<div class="empty">Nessun movimento</div>';
-  }
-  return h;
+  }else h+=statsView();
+  return h+xFooter();
 };
+function statsView(){
+  const X=S.entries.filter(e=>e.st==='ok'&&e.t==='X');
+  if(!X.length)return '<div class="empty">Ancora nessuna X</div>';
+  const byCat={};X.forEach(e=>{const v=byCat[e.c]||(byCat[e.c]={n:0,u:0});v.n+=e.q;v.u+=units(e)});
+  const cats=Object.entries(byCat).sort((a,b)=>b[1].u-a[1].u||b[1].n-a[1].n),mx=Math.max(...cats.map(c=>c[1].u));
+  let h=`<h2 style="margin-top:6px">Cosa porta più soldi in cassa</h2><div class="card">${cats.slice(0,10).map(([c,v],i)=>`<div class="srank"><div class="srow2"><span>${i+1}. ${esc(C(c).nome)}</span><b class="num">${eur(v.u*S.valX)}</b></div><div class="t"><i style="width:${v.u/mx*100}%"></i></div><div class="small mute">${v.n===1?'1 volta':v.n+' volte'}</div></div>`).join('')}</div>`;
+  const months={};X.forEach(e=>{const m=e.d.slice(0,7);const o=months[m]||(months[m]={});o[e.p]=(o[e.p]||0)+units(e)});
+  h+=`<h2>Chi prende più X ogni mese</h2><div class="list">${Object.keys(months).sort().reverse().map(m=>{
+    const arr=Object.entries(months[m]).sort((a,b)=>b[1]-a[1]),top=arr[0][1],kings=arr.filter(a=>a[1]===top).map(a=>P(a[0])),tot=arr.reduce((t,a)=>t+a[1],0),d=parse(m+'-01');
+    return `<button class="qrow" style="grid-template-columns:auto minmax(0,1fr) auto;width:100%;border:0;background:none;text-align:left" data-a="player" data-v="${kings[0].id}">${jersey(kings[0],34)}<div><b>${MF[d.getMonth()]} ${d.getFullYear()}</b><div class="small mute">${esc(kings.map(k=>k.sopr).join(', '))} · ${top} X</div></div><span class="small mute num">${tot} X in tutto</span></button>`}).join('')}</div>`;
+  return h;
+}
+function riepilogoText(){
+  const r=rank();
+  const lines=r.map(t=>`${t.p.sopr}: ${t.p.stato==='esonerato'?'quota '+eur(S.quota):t.net<0?'riceve '+eur(-t.net):eur(t.net)}`);
+  return `Riepilogo X · Serie C 26/27 (al ${fd(T)})\n\n${lines.join('\n')}\n\nTotale cassa: ${eur(cassa().tot)}`;
+}
+function xFooter(){
+  return `<h2>Riepilogo per il pagamento</h2><div class="card"><button class="btn a" style="margin:0" data-a="riep">Copia il riepilogo</button><details style="margin-top:12px"><summary class="small">Vedi il testo</summary><pre class="riep">${esc(riepilogoText())}</pre></details></div>
+  <button class="card" style="width:100%;text-align:left;display:flex;align-items:center;gap:12px;margin-top:14px" data-a="regol">${ic('doc')}<span><b>Regolamento Serie C 26/27</b><span class="small mute" style="display:block">Apri il PDF</span></span></button>`;
+}
+function download(name,type,content){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+}
 V.cal=()=>{
   PZ=pizzaSched(40);
   let h=`<h1>Calendario</h1><div class="seg">${[['ag','Calendario'],['pz','Pizza']].map(([k,l])=>`<button class="${UI.cseg===k?'on':''}" data-a="cseg" data-v="${k}">${l}</button>`).join('')}</div>`;
@@ -338,6 +364,7 @@ V.more=()=>{
   return `<h1>Impostazioni</h1>
   <div class="card prof">${jersey(me,64)}<div><b>${esc(me.sopr)}</b><span class="mute">${esc(me.ruolo)}</span><div>${me.min.map(m=>`<span class="tag a">${esc(m)}</span>`).join('')}</div></div></div>
   <button class="btn ghost" data-a="edit">Modifica il mio profilo</button>
+  ${me.admin||(me.min||[]).includes('Admin')?`<h2>Backup dei dati</h2><div class="card" style="display:grid;gap:8px"><button class="btn a" style="margin:0" data-a="bk" data-v="json">Scarica il backup completo</button><button class="btn ghost" style="margin:0" data-a="bk" data-v="csv">Scarica l'elenco X per Excel</button></div>`:''}
   ${notifSection()}
   ${ges&&S.code?`<h2>Codice squadra</h2><div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><b style="font-size:22px;letter-spacing:.06em">${esc(S.code)}</b><button class="btn sm ghost" data-a="copycode">Copia</button></div>`:''}
   <h2>Permessi</h2><div class="card" style="padding:8px 12px;overflow-x:auto"><table class="ptab"><thead><tr><th>Chi</th><th>X e Jolly</th><th>Partite</th><th>Pizza</th><th>Gestione</th></tr></thead><tbody>${[...S.people].sort((a,b)=>(a.staff-b.staff)||a.cognome.localeCompare(b.cognome)).map(p=>`<tr><td>${esc(p.sopr)}${p.admin?' <span class="mute small">· admin</span>':p.staff?' <span class="mute small">· staff</span>':''}</td>${['x','partite','pizza','gestione'].map(k=>`<td><input type="checkbox" data-f="perm" data-p="${p.id}" data-k="${k}" aria-label="${k}" ${p.perms.includes(k)?'checked':''} ${ges&&!p.admin?'':'disabled'}></td>`).join('')}</tr>`).join('')}</tbody></table></div>
@@ -465,6 +492,20 @@ const A={
   ev:v=>{const [k,t]=v.split('|');PZ=pizzaSched(40);const e=evs(k).find(x=>x.k===t);if(e)sheet(`<div class="mon" style="margin-top:6px">${fd(k)}</div><div class="card">${evBody(e)}</div>`)},
   edit:()=>editSheet(),
   cats:v=>catsSheet(v),
+  riep:async()=>{const t=riepilogoText();
+    if(navigator.share){try{await navigator.share({text:t});return}catch(e){if(e&&e.name==='AbortError')return}}
+    try{await navigator.clipboard.writeText(t);toast('Copiato',' Incollalo nel gruppo della squadra.')}catch(e){toast('Riepilogo',' Apri "Vedi il testo" e copialo a mano.')}},
+  bk:v=>{const day=T;
+    if(v==='json'){const data={creato:new Date().toISOString(),stagione:'Serie C 26/27',valX:S.valX,quota:S.quota,
+      people:S.people.map(({foto,...p})=>p),cats:S.cats,entries:S.entries,pizza:S.pizza,
+      matches:S._m||S.matches.filter(m=>!m.fip),gyms:S._g||[]};
+      download(`unvy-backup-${day}.json`,'application/json',JSON.stringify(data,null,1));}
+    else{const rows=[['Data','Giocatore','Tipo','Motivo','Quantità','Euro','Nota','Assegnata da']];
+      [...S.entries].filter(e=>e.st==='ok').sort((a,b)=>a.d.localeCompare(b.d)).forEach(e=>rows.push([e.d,P(e.p).sopr,e.t==='X'?'X':'Jolly',C(e.c).nome,units(e),(e.t==='X'?1:-1)*units(e)*S.valX,e.n,P(e.by).sopr]));
+      const cell=x=>{const s=String(x??'');return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+      download(`unvy-x-${day}.csv`,'text/csv;charset=utf-8','﻿'+rows.map(r=>r.map(cell).join(';')).join('\r\n'));}
+    toast('Backup',' File scaricato: conservalo in un posto sicuro (Drive, mail, computer).')},
+  regol:async()=>{try{if(!window._regol){const d=await rpc('get_doc',{tok:lsGet(TOKK),did:'regolamento'});if(!d)return toast('Regolamento',' Non ancora caricato.');const bin=atob(d.b64.replace(/\s/g,''));const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);window._regol=URL.createObjectURL(new Blob([u],{type:d.mime}))}const a=document.createElement('a');a.href=window._regol;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}catch(e){toast('Ops',' '+errMsg(e))}},
   lgp:v=>{LG.pid=v;LG.st=2;LG.pin='';LG.first='';LG.err='';render()},
   lgback:()=>{LG.st=Math.max(0,LG.st-1);LG.pin='';LG.first='';LG.err='';render()},
   pk:v=>{LG.err='';LG.pin=v==='⌫'?LG.pin.slice(0,-1):(LG.pin+v).slice(0,4);
@@ -522,7 +563,9 @@ async function boot(){
   setInterval(()=>{if(document.visibilityState==='visible')loadFip().then(()=>S&&render())},5*60000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S){rtConnect();refresh(true);loadFip().then(()=>render())}});
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')r.update()})}).catch(()=>{});
-    let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded||$('#sheet').hidden===false)return;reloaded=true;location.reload()});if(pushOK())pushEndpoint().then(()=>{if(S&&UI.tab==='more')render()})}
+    /* ricarica solo quando arriva una versione nuova, non alla prima installazione */
+    const hadSW=!!navigator.serviceWorker.controller;let reloaded=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!hadSW||reloaded||$('#sheet').hidden===false||!S)return;reloaded=true;location.reload()});if(pushOK())pushEndpoint().then(()=>{if(S&&UI.tab==='more')render()})}
 }
 boot();
 }

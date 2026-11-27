@@ -112,11 +112,18 @@ create table if not exists push_outbox (
   picked_at timestamptz,
   created_at timestamptz not null default now()
 );
+create table if not exists docs (
+  id text primary key,
+  nome text not null,
+  mime text not null default 'application/pdf',
+  data bytea not null,
+  updated_at timestamptz not null default now()
+);
 create table if not exists fip_snap (id int primary key default 1 check (id = 1), data jsonb not null);
 create table if not exists sent_marks (k text primary key, at timestamptz not null default now());
 
 do $$ declare t text; begin
-  foreach t in array array['team','people','cats','entries','gyms','matches','pizza_due','pizza_hist','pizza_skip','sessions','push_subs','push_outbox','fip_snap','sent_marks'] loop
+  foreach t in array array['team','people','cats','entries','gyms','matches','pizza_due','pizza_hist','pizza_skip','sessions','push_subs','push_outbox','fip_snap','sent_marks','docs'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on public.%I from anon, authenticated', t);
   end loop;
@@ -194,6 +201,14 @@ begin
       'hist', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'p', p, 'mot', mot, 'd', d) order by d) from pizza_hist), '[]'::jsonb),
       'skip', coalesce((select jsonb_object_agg(d::text, true) from pizza_skip), '{}'::jsonb))
   );
+end $$;
+
+-- documenti (es. regolamento): solo con sessione valida
+create or replace function public.get_doc(tok uuid, did text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from sessions where token = tok) then raise exception 'SESSIONE'; end if;
+  return (select jsonb_build_object('nome', nome, 'mime', mime, 'b64', encode(data, 'base64')) from docs where id = did);
 end $$;
 
 -- ---------------------------------------------------------------- notifiche: aiuti
@@ -508,6 +523,7 @@ grant execute on function public.login_people(text) to anon, authenticated;
 grant execute on function public.login(text, text, text) to anon, authenticated;
 grant execute on function public.get_state(uuid) to anon, authenticated;
 grant execute on function public.act(uuid, text, jsonb) to anon, authenticated;
+grant execute on function public.get_doc(uuid, text) to anon, authenticated;
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     grant execute on function public.push_queue(), public.push_done(bigint[], text[]), public.push_fip(jsonb), public.push_reminders(timestamptz) to service_role;
