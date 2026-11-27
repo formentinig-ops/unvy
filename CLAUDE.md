@@ -66,6 +66,15 @@ cd supabase/functions/push && curl -s -X POST "https://api.supabase.com/v1/proje
 - Il proxy della sessione non fa passare le WebSocket: il realtime vero si verifica solo dai telefoni.
 - Chromium headless non può iscriversi alle push: per provare il flusso si simula `PushManager`.
 
+### Anteprima per l'Admin (pannello Artifact)
+L'Admin guarda le modifiche nell'anteprima accanto alla chat: https://claude.ai/artifact/Bkr8D6w5FG6SJGPemuZstY
+Dopo ogni modifica all'app va **rigenerata e ripubblicata** (stesso URL):
+1. fotografia dei dati da Supabase (Management API, una `select` che restituisce people/cats/entries/gyms/matches/training/pizza
+   come JSON) salvata **nello scratchpad**, mai nel repository;
+2. `python3 scripts/build_preview.py <snapshot.json> <cartella scratchpad> [regolamento.pdf]`;
+3. pubblica `index.html` della cartella con lo strumento Artifact (`url` sopra, `files` con le icone).
+L'anteprima usa `scripts/preview_mock.js` (finto backend in memoria): niente PIN, push o tempo reale, download bloccati.
+
 ## Regole della squadra (dal regolamento interno)
 - **X** = multa da 3 € (valore in `team.val_x`). Categorie in tabella `cats` (Tecnici, Comportamentali, Vari);
   "Cartellino rosso" vale 2 X; "Ritardo ++ (ogni 3 minuti)" e "Materiale dimenticato in palestra" si danno a quantità.
